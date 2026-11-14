@@ -95,6 +95,7 @@ class XrayVpnService : VpnService() {
         val builder = Builder()
             .setSession("JPN")
             .setMtu(1500)
+            .addDnsServer("1.1.1.1")
             .addAddress("10.111.0.1", 30)
             .addRoute("0.0.0.0", 0)
             .addAddress("fdfe:dcba:9876::1", 126)
@@ -208,7 +209,7 @@ class XrayVpnService : VpnService() {
         return builder
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("JPN")
-            .setContentText("Xray VPN is running")
+            .setContentText("VPN-подключение активно")
             .setOngoing(true)
             .build()
     }
