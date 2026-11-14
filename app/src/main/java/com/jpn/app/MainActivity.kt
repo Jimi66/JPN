@@ -22,6 +22,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import libXray.LibXray
+import com.jpn.app.vpn.XrayVpnService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -128,12 +129,12 @@ class MainActivity : Activity() {
         content.addView(sectionTitle("Добавить подписку"))
         nameInput = EditText(this).apply {
             hint = "Название (необязательно)"
-            singleLine = true
+            setSingleLine(true)
             filters = arrayOf(InputFilter.LengthFilter(25))
         }
         urlInput = EditText(this).apply {
             hint = "URL подписки"
-            singleLine = true
+            setSingleLine(true)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_URI
         }
