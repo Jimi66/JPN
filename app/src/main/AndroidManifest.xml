@@ -23,7 +23,10 @@
             android:name=".vpn.XrayVpnService"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:foregroundServiceType="specialUse">\n            <property\n                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"\n                android:value="User-initiated VPN tunnel" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-initiated VPN tunnel" />
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
