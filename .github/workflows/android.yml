@@ -51,6 +51,7 @@ jobs:
         run: |
           git clone https://github.com/XTLS/libXray.git
           cd libXray
+          git checkout 5a0f7d8d1c28b34afb5727b04b26a10f6dbac7e3
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           export LIBXRAY_ANDROID_API=26
           python3 build/main.py android
