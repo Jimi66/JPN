@@ -125,7 +125,7 @@ class XrayVpnService : VpnService() {
                 .put(
                     "settings",
                     JSONObject()
-                        .put("name", "jpn-tun")
+                        // Android assigns the interface name when Builder.establish() is called.
                         .put("mtu", 1500)
                 )
         )
