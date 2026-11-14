@@ -1,6 +1,7 @@
 package com.jpn.app
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -53,11 +54,36 @@ class MainActivity : Activity() {
 
     private val preferences by lazy { getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
 
+    private val vpnStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val state = intent?.getStringExtra("state") ?: return
+            val message = intent.getStringExtra("message") ?: state
+            setStatus(message)
+            connectButton.text = if (state == "connected") "Отключить" else "Подключить"
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildScreen()
         renderSubscriptions()
         refreshVpnState()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = android.content.IntentFilter(XrayVpnService.ACTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(vpnStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(vpnStateReceiver, filter)
+        }
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(vpnStateReceiver) }
+        super.onStop()
     }
 
     private fun buildScreen() {
@@ -232,7 +258,7 @@ class MainActivity : Activity() {
                 }
 
                 mainHandler.post {
-                    saveSubscription(
+                    val wasUpdated = saveSubscription(
                         exactUrl,
                         requestedName,
                         outbounds,
@@ -241,7 +267,13 @@ class MainActivity : Activity() {
                     )
                     urlInput.setText("")
                     nameInput.setText("")
-                    setStatus("Подписка успешно добавлена")
+                    setStatus(
+                        if (wasUpdated) {
+                            "Эта подписка уже существует. Подписка успешно обновлена"
+                        } else {
+                            "Подписка успешно добавлена"
+                        }
+                    )
                     renderSubscriptions()
                 }
             } catch (error: Exception) {
@@ -288,7 +320,7 @@ class MainActivity : Activity() {
         outbounds: JSONArray,
         allowInsecure: Boolean,
         hwidInCookie: Boolean
-    ) {
+    ): Boolean {
         val subscriptions = readSubscriptions()
         var existingIndex = -1
         for (i in 0 until subscriptions.length()) {
@@ -313,7 +345,6 @@ class MainActivity : Activity() {
         subscription.put("outbounds", JSONArray(outbounds.toString()))
         if (existingIndex >= 0) {
             subscriptions.put(existingIndex, subscription)
-            setStatus("Эта подписка уже существует. Подписка успешно обновлена")
         } else {
             subscriptions.put(subscription)
         }
@@ -322,6 +353,7 @@ class MainActivity : Activity() {
             .putString(KEY_SUBSCRIPTIONS, subscriptions.toString())
             .putString(KEY_SELECTED_URL, exactUrl)
             .apply()
+        return existingIndex >= 0
     }
 
     private fun pasteUrlFromClipboard() {
@@ -444,7 +476,13 @@ class MainActivity : Activity() {
     private fun refreshVpnState() {
         val running = isVpnRunning()
         connectButton.text = if (running) "Отключить" else "Подключить"
-        if (running) setStatus("VPN подключён") else setStatus("Отключено")
+        if (running) {
+            setStatus("VPN подключён")
+        } else {
+            val state = preferences.getString("vpn_state", "disconnected")
+            val message = preferences.getString("vpn_message", "Отключено")
+            setStatus(if (state == "error") message ?: "Ошибка запуска VPN" else "Отключено")
+        }
     }
 
     override fun onResume() {
