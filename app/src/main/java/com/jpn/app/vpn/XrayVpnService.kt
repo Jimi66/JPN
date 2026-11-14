@@ -52,7 +52,8 @@ class XrayVpnService : VpnService() {
     private var coreStarted = false
 
     private val socketController = object : DialerController {
-        override fun protectFd(fd: Int): Boolean = protect(fd)
+        // gomobile exposes Go's int as Java/Kotlin Long.
+        override fun protectFd(fd: Long): Boolean = protect(fd.toInt())
     }
 
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
