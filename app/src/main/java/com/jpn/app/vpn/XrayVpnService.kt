@@ -25,6 +25,7 @@ class XrayVpnService : VpnService() {
         const val ACTION_START = "com.jpn.app.vpn.START"
         const val ACTION_STOP = "com.jpn.app.vpn.STOP"
         const val EXTRA_XRAY_JSON = "xray_json"
+        const val ACTION_STATE_CHANGED = "com.jpn.app.vpn.STATE_CHANGED"
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
@@ -62,6 +63,7 @@ class XrayVpnService : VpnService() {
         when (intent?.action) {
             ACTION_STOP -> {
                 stopCoreAndTunnel()
+                publishState("disconnected", "VPN отключён")
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -78,6 +80,7 @@ class XrayVpnService : VpnService() {
                     startCoreAndTunnel(config)
                 } catch (error: Exception) {
                     stopCoreAndTunnel()
+                    publishState("error", error.message ?: "Не удалось запустить Xray")
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf(startId)
                 }
@@ -108,7 +111,8 @@ class XrayVpnService : VpnService() {
         val env = config.optJSONObject("env") ?: JSONObject().also {
             config.put("env", it)
         }
-        env.put("xray.tun.fd", vpnInterface!!.fd)
+        // Xray reads this value as an environment-variable string.
+        env.put("xray.tun.fd", vpnInterface!!.fd.toString())
 
         val inbounds = config.optJSONArray("inbounds") ?: JSONArray().also {
             config.put("inbounds", it)
@@ -136,6 +140,7 @@ class XrayVpnService : VpnService() {
             throw IllegalStateException(response.optString("error", "Xray failed to start"))
         }
         coreStarted = true
+        publishState("connected", "VPN подключён")
     }
 
     private fun stopCoreAndTunnel() {
@@ -156,6 +161,7 @@ class XrayVpnService : VpnService() {
 
     override fun onRevoke() {
         stopCoreAndTunnel()
+        publishState("disconnected", "Разрешение VPN отозвано")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -163,6 +169,21 @@ class XrayVpnService : VpnService() {
     override fun onDestroy() {
         stopCoreAndTunnel()
         super.onDestroy()
+    }
+
+
+    private fun publishState(state: String, message: String) {
+        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putString("vpn_state", state)
+            .putString("vpn_message", message)
+            .apply()
+        sendBroadcast(
+            Intent(ACTION_STATE_CHANGED)
+                .setPackage(packageName)
+                .putExtra("state", state)
+                .putExtra("message", message)
+        )
     }
 
     private fun createNotificationChannel() {
