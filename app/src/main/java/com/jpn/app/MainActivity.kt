@@ -114,17 +114,11 @@ class MainActivity : Activity() {
     }
 
     private fun buildScreen() {
+        val screen = android.widget.FrameLayout(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(18), dp(20), dp(18))
-        }
-
-        val title = TextView(this).apply {
-            text = "JPN"
-            textSize = 30f
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(10))
+            setPadding(dp(20), dp(8), dp(20), dp(8))
         }
 
         statusView = TextView(this).apply {
@@ -185,12 +179,18 @@ class MainActivity : Activity() {
                 }
             }
         }
-        root.addView(title, matchWidth())
-        root.addView(vpnButton, LinearLayout.LayoutParams(dp(156), dp(156)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            bottomMargin = dp(8)
-        })
-        root.addView(statusView, matchWidth())
+        val vpnArea = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(vpnButton, LinearLayout.LayoutParams(dp(156), dp(156)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(8)
+            })
+            addView(statusView, matchWidth())
+        }
+        root.addView(vpnArea, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
 
         nodesHeader = TextView(this).apply {
             text = "Серверы пока не добавлены"
@@ -264,13 +264,7 @@ class MainActivity : Activity() {
         }
         root.addView(serverCard, matchWidth())
 
-        val spacer = android.view.View(this)
-        root.addView(spacer, LinearLayout.LayoutParams(1, 0, 1f))
-
-        val bottomRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        }
+        val addButton = Button(this).apply {
         val addButton = Button(this).apply {
             text = "+"
             textSize = 30f
@@ -302,14 +296,16 @@ class MainActivity : Activity() {
                 }.show()
             }
         }
-        bottomRow.addView(addButton, LinearLayout.LayoutParams(dp(60), dp(60)))
-        root.addView(bottomRow, matchWidth())
-
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            addView(root)
-        }
-        setContentView(scroll)
+        screen.addView(root, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        screen.addView(addButton, android.widget.FrameLayout.LayoutParams(dp(60), dp(60)).apply {
+            gravity = Gravity.BOTTOM or Gravity.END
+            marginEnd = dp(20)
+            bottomMargin = dp(16)
+        })
+        setContentView(screen)
     }
 
     private fun showManualSubscriptionDialog() {
