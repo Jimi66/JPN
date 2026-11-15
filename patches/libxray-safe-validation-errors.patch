@@ -1,8 +1,7 @@
 diff --git a/share/validate_outbound.go b/share/validate_outbound.go
-index 0000000..0000000 100644
 --- a/share/validate_outbound.go
 +++ b/share/validate_outbound.go
-@@ -1,10 +1,11 @@
+@@ -1,11 +1,12 @@
  package share
  
  import (
@@ -14,13 +13,11 @@ index 0000000..0000000 100644
  
  	"github.com/xtls/xray-core/infra/conf"
  )
-@@ -21,12 +22,20 @@ func filterBuildableOutbounds(config *conf.Config) (*conf.Config, error) {
- 
+@@ -24,14 +25,35 @@ func filterBuildableOutbounds(config *conf.Config) (*conf.Config, error) {
  	validOutbounds := make([]conf.OutboundDetourConfig, 0, len(config.OutboundConfigs))
 +	buildErrorCategories := make(map[string]struct{})
  	for index := range validationOutbounds {
--		if _, err := validationOutbounds[index].Build(); err != nil {
-+		if _, err := validationOutbounds[index].Build(); err != nil {
+ 		if _, err := validationOutbounds[index].Build(); err != nil {
 +			buildErrorCategories[classifyOutboundBuildError(err)] = struct{}{}
  			continue
  		}
