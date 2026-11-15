@@ -37,6 +37,8 @@ class MainActivity : Activity() {
         private const val PREFS = "jpn_settings"
 
         private const val KEY_SUBSCRIPTION_URL = "subscription_url"
+        private const val KEY_SUBSCRIPTION_CONTENT = "subscription_content"
+        private const val KEY_SAVED_NODES = "saved_nodes_json"
         private const val KEY_VPN_STATE = "vpn_state"
         private const val VPN_REQUEST_CODE = 4102
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
@@ -74,6 +76,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildScreen()
+        restoreSavedSubscription()
         refreshVpnState()
     }
 
@@ -201,27 +204,29 @@ class MainActivity : Activity() {
                 val body = downloadSubscription(subscriptionUrl)
                 val subscriptionText = decodeSubscriptionBody(body)
                 val sourceCount = countSubscriptionCandidates(subscriptionText)
-                val parsedNodes = parseShareLinks(subscriptionText)
-                if (parsedNodes.length() == 0) {
-                    throw IllegalArgumentException("В подписке не найдено поддерживаемых серверов")
-                }
-
-                val imported = ArrayList<JSONObject>()
-                for (index in 0 until parsedNodes.length()) {
-                    val node = JSONObject(parsedNodes.getJSONObject(index).toString())
-                    if (node.optString("tag").isBlank()) {
-                        node.put("tag", "Сервер ${index + 1}")
-                    }
-                    imported.add(node)
+                val imported = parseSubscriptionEntries(subscriptionText)
+                if (imported.isEmpty()) {
+                    // Keep even an unrecognized non-empty subscription so it is not lost.
+                    imported.add(
+                        JSONObject()
+                            .put("tag", "Подписка (не распознана)")
+                            .put("jpnRawShareLink", subscriptionText)
+                            .put("jpnNeedsValidation", true)
+                    )
                 }
 
                 mainHandler.post {
                     nodes.clear()
                     nodes.addAll(imported)
+                    preferences.edit()
+                        .putString(KEY_SUBSCRIPTION_CONTENT, subscriptionText)
+                        .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
+                        .apply()
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
                     val rejectedIndexes = findRejectedCandidateIndexes(subscriptionText)
-                    val rejected = (sourceCount - nodes.size).coerceAtLeast(0)
+                    val acceptedForUse = nodes.count { !it.optBoolean("jpnNeedsValidation", false) }
+                    val rejected = (sourceCount - acceptedForUse).coerceAtLeast(0)
                     val rejectedDetails = if (rejectedIndexes.isNotEmpty()) {
                         "; отклонены: ${rejectedIndexes.joinToString("; ")}"
                     } else {
@@ -234,9 +239,9 @@ class MainActivity : Activity() {
                         ""
                     }
                     val diagnostic = if (sourceCount > 0) {
-                        "Подписка: найдено $sourceCount, принято ${nodes.size}, отклонено $rejected$rejectedDetails$parameterSummary"
+                        "Подписка сохранена: найдено $sourceCount, сохранено ${nodes.size}, готово к подключению $acceptedForUse, требуют проверки $rejected$rejectedDetails$parameterSummary"
                     } else {
-                        "Подписка загружена: серверов ${nodes.size} (формат источника не позволяет посчитать записи)"
+                        "Подписка сохранена целиком; найдено записей: ${nodes.size}. Некоторые записи требуют проверки"
                     }
                     setStatus(diagnostic)
                 }
@@ -538,6 +543,83 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Imports every subscription entry independently. A failed entry is retained
+     * as a private raw link and can be retried when the user taps it.
+     */
+    private fun parseSubscriptionEntries(text: String): MutableList<JSONObject> {
+        val source = text.removePrefix("\\uFEFF").trim()
+        val imported = mutableListOf<JSONObject>()
+
+        if (source.startsWith("{")) {
+            val outbounds = runCatching {
+                JSONObject(source).optJSONArray("outbounds")
+            }.getOrNull()
+            if (outbounds != null) {
+                for (i in 0 until outbounds.length()) {
+                    val outbound = outbounds.optJSONObject(i) ?: continue
+                    val copy = JSONObject(outbound.toString())
+                    if (copy.optString("tag").isBlank()) copy.put("tag", "Сервер ${i + 1}")
+                    imported.add(copy)
+                }
+                return imported
+            }
+        }
+
+        val links = source.lineSequence().map { it.trim() }
+            .filter { line ->
+                val scheme = line.substringBefore("://", "")
+                line.contains("://") &&
+                    scheme.matches(Regex("(?i)vless|vmess|trojan|ss|socks|hysteria2|hy2"))
+            }.toList()
+
+        links.forEachIndexed { index, link ->
+            val fallbackName = "Сервер ${index + 1}"
+            val displayName = runCatching {
+                val fragment = android.net.Uri.parse(link).fragment
+                fragment?.let { android.net.Uri.decode(it) }?.takeIf { it.isNotBlank() }
+            }.getOrNull() ?: fallbackName
+            val parsed = runCatching { parseShareLinks(link) }.getOrNull()
+            val outbound = parsed?.optJSONObject(0)
+            if (outbound != null) {
+                val copy = JSONObject(outbound.toString())
+                if (copy.optString("tag").isBlank()) copy.put("tag", displayName)
+                imported.add(copy)
+            } else {
+                imported.add(
+                    JSONObject()
+                        .put("tag", displayName)
+                        .put("jpnRawShareLink", link)
+                        .put("jpnNeedsValidation", true)
+                )
+            }
+        }
+        return imported
+    }
+
+    private fun restoreSavedSubscription() {
+        val saved = preferences.getString(KEY_SAVED_NODES, null) ?: return
+        runCatching {
+            val array = JSONArray(saved)
+            nodes.clear()
+            for (i in 0 until array.length()) {
+                array.optJSONObject(i)?.let { nodes.add(JSONObject(it.toString())) }
+            }
+            renderNodes()
+        }
+    }
+
+    private fun safeImportError(message: String?): String {
+        val error = message.orEmpty().lowercase()
+        return when {
+            "invalid server address or port" in error -> "неверный адрес сервера или порт"
+            "invalid vless identifier" in error -> "неверный идентификатор VLESS"
+            "unsupported or invalid transport" in error -> "неподдерживаемые параметры транспорта"
+            "invalid tls" in error || "reality" in error -> "некорректные параметры TLS/Reality"
+            else -> "ошибка разбора конфигурации"
+        }
+    }
+
     private fun parseShareLinks(text: String): JSONArray {
         val request = JSONObject()
             .put("apiVersion", 3)
@@ -563,8 +645,9 @@ class MainActivity : Activity() {
 
         nodes.forEachIndexed { index, node ->
             val name = node.optString("tag").ifBlank { "Сервер ${index + 1}" }
+            val needsValidation = node.optBoolean("jpnNeedsValidation", false)
             val button = Button(this).apply {
-                text = name
+                text = if (needsValidation) "$name · не проверен" else name
                 setOnClickListener { connectToOutbound(node, name) }
             }
             nodesContainer.addView(button, matchWidth())
@@ -572,6 +655,24 @@ class MainActivity : Activity() {
     }
 
     private fun connectToOutbound(outbound: JSONObject, name: String) {
+        val rawShareLink = outbound.optString("jpnRawShareLink")
+        if (rawShareLink.isNotBlank()) {
+            hideKeyboard()
+            setStatus("Проверяю сервер: $name…")
+            Thread {
+                try {
+                    val parsed = parseShareLinks(rawShareLink)
+                    if (parsed.length() == 0) throw IllegalArgumentException("Xray не вернул конфигурацию сервера")
+                    val resolved = JSONObject(parsed.getJSONObject(0).toString())
+                    mainHandler.post { connectToOutbound(resolved, name) }
+                } catch (error: Exception) {
+                    mainHandler.post {
+                        setStatus("Сервер сохранён, но пока не поддерживается: ${safeImportError(error.message)}")
+                    }
+                }
+            }.start()
+            return
+        }
         if (isVpnRunning()) {
             pendingSelectedOutbound = JSONObject(outbound.toString())
             pendingSelectedName = name
