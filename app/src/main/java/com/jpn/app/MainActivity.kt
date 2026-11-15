@@ -432,6 +432,8 @@ class MainActivity : Activity() {
                 val rawError = validation?.optString("error").orEmpty().lowercase()
                 val safeReason = when {
                     "invalid vless identifier" in rawError -> "неверный идентификатор VLESS"
+                    "unsupported vless encryption" in rawError -> "неподдерживаемые параметры шифрования VLESS"
+                    "unsupported vless flow" in rawError -> "неподдерживаемый режим VLESS"
                     "invalid server address or port" in rawError -> "неверный адрес сервера или порт"
                     "unsupported or invalid transport settings" in rawError -> "неподдерживаемые или некорректные параметры транспорта"
                     "invalid tls/reality settings" in rawError -> "некорректные параметры TLS/Reality"
@@ -614,6 +616,8 @@ class MainActivity : Activity() {
         return when {
             "invalid server address or port" in error -> "неверный адрес сервера или порт"
             "invalid vless identifier" in error -> "неверный идентификатор VLESS"
+            "unsupported vless encryption" in error -> "неподдерживаемые параметры шифрования VLESS"
+            "unsupported vless flow" in error -> "неподдерживаемый режим VLESS"
             "unsupported or invalid transport" in error -> "неподдерживаемые параметры транспорта"
             "invalid tls" in error || "reality" in error -> "некорректные параметры TLS/Reality"
             else -> "ошибка разбора конфигурации"
