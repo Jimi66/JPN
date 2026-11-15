@@ -205,16 +205,6 @@ class MainActivity : Activity() {
                 val subscriptionText = decodeSubscriptionBody(body)
                 val sourceCount = countSubscriptionCandidates(subscriptionText)
                 val imported = parseSubscriptionEntries(subscriptionText)
-                if (imported.isEmpty()) {
-                    // Keep even an unrecognized non-empty subscription so it is not lost.
-                    imported.add(
-                        JSONObject()
-                            .put("tag", "Подписка (не распознана)")
-                            .put("jpnRawShareLink", subscriptionText)
-                            .put("jpnNeedsValidation", true)
-                    )
-                }
-
                 mainHandler.post {
                     nodes.clear()
                     nodes.addAll(imported)
@@ -239,9 +229,9 @@ class MainActivity : Activity() {
                         ""
                     }
                     val diagnostic = if (sourceCount > 0) {
-                        "Подписка сохранена: найдено $sourceCount, сохранено ${nodes.size}, готово к подключению $acceptedForUse, требуют проверки $rejected$rejectedDetails$parameterSummary"
+                        "Подписка обработана: найдено $sourceCount, добавлено защищённых TLS/REALITY серверов ${nodes.size}, пропущено $rejected$rejectedDetails$parameterSummary"
                     } else {
-                        "Подписка сохранена целиком; найдено записей: ${nodes.size}. Некоторые записи требуют проверки"
+                        "В подписке не найдено поддерживаемых серверов с защитой TLS/REALITY"
                     }
                     setStatus(diagnostic)
                 }
@@ -563,6 +553,7 @@ class MainActivity : Activity() {
                 for (i in 0 until outbounds.length()) {
                     val outbound = outbounds.optJSONObject(i) ?: continue
                     val copy = JSONObject(outbound.toString())
+                    if (!hasTlsOrRealityProtection(copy)) continue
                     if (copy.optString("tag").isBlank()) copy.put("tag", "Сервер ${i + 1}")
                     imported.add(copy)
                 }
@@ -585,20 +576,24 @@ class MainActivity : Activity() {
             }.getOrNull() ?: fallbackName
             val parsed = runCatching { parseShareLinks(link) }.getOrNull()
             val outbound = parsed?.optJSONObject(0)
-            if (outbound != null) {
+            if (outbound != null && hasTlsOrRealityProtection(outbound)) {
                 val copy = JSONObject(outbound.toString())
                 if (copy.optString("tag").isBlank()) copy.put("tag", displayName)
                 imported.add(copy)
-            } else {
-                imported.add(
-                    JSONObject()
-                        .put("tag", displayName)
-                        .put("jpnRawShareLink", link)
-                        .put("jpnNeedsValidation", true)
-                )
             }
         }
         return imported
+    }
+
+    /**
+     * JPN only lists servers protected by TLS or REALITY.
+     * Other security modes (including none) are intentionally excluded.
+     */
+    private fun hasTlsOrRealityProtection(outbound: JSONObject): Boolean {
+        val streamSettings = outbound.optJSONObject("streamSettings") ?: return false
+        val security = streamSettings.optString("security")
+        return security.equals("tls", ignoreCase = true) ||
+            security.equals("reality", ignoreCase = true)
     }
 
     private fun restoreSavedSubscription() {
