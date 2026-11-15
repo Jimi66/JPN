@@ -52,7 +52,79 @@ jobs:
           git clone https://github.com/XTLS/libXray.git
           cd libXray
           git checkout 5a0f7d8d1c28b34afb5727b04b26a10f6dbac7e3
-          git apply ../patches/libxray-safe-validation-errors.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("share/validate_outbound.go")
+          source = path.read_text()
+
+          replacements = [
+              ('\t"reflect"\n', '\t"reflect"\n\t"strings"\n'),
+              (
+                  '\tvalidOutbounds := make([]conf.OutboundDetourConfig, 0, len(config.OutboundConfigs))\n'
+                  '\tfor index := range validationOutbounds {\n'
+                  '\t\tif _, err := validationOutbounds[index].Build(); err != nil {\n'
+                  '\t\t\tcontinue\n'
+                  '\t\t}\n'
+                  '\t\tvalidOutbounds = append(validOutbounds, config.OutboundConfigs[index])\n'
+                  '\t}\n'
+                  '\tif len(validOutbounds) == 0 {\n'
+                  '\t\treturn nil, fmt.Errorf("no valid outbound found")\n'
+                  '\t}\n',
+                  '\tvalidOutbounds := make([]conf.OutboundDetourConfig, 0, len(config.OutboundConfigs))\n'
+                  '\tbuildErrorCategories := make(map[string]struct{})\n'
+                  '\tfor index := range validationOutbounds {\n'
+                  '\t\tif _, err := validationOutbounds[index].Build(); err != nil {\n'
+                  '\t\t\tbuildErrorCategories[classifyOutboundBuildError(err)] = struct{}{}\n'
+                  '\t\t\tcontinue\n'
+                  '\t\t}\n'
+                  '\t\tvalidOutbounds = append(validOutbounds, config.OutboundConfigs[index])\n'
+                  '\t}\n'
+                  '\tif len(validOutbounds) == 0 {\n'
+                  '\t\tif len(buildErrorCategories) == 1 {\n'
+                  '\t\t\tfor category := range buildErrorCategories {\n'
+                  '\t\t\t\treturn nil, fmt.Errorf("no valid outbound found: %s", category)\n'
+                  '\t\t\t}\n'
+                  '\t\t}\n'
+                  '\t\treturn nil, fmt.Errorf("no valid outbound found: Xray rejected the configuration")\n'
+                  '\t}\n'
+              ),
+              (
+                  '\treturn config, nil\n'
+                  '}\n',
+                  '\treturn config, nil\n'
+                  '}\n'
+                  '\n'
+                  '// classifyOutboundBuildError returns only a non-sensitive error category.\n'
+                  '// The original Xray error may contain server addresses or credentials.\n'
+                  'func classifyOutboundBuildError(err error) string {\n'
+                  '\tmessage := strings.ToLower(err.Error())\n'
+                  '\tswitch {\n'
+                  '\tcase strings.Contains(message, "uuid"), strings.Contains(message, "user id"), strings.Contains(message, "vless id"):\n'
+                  '\t\treturn "invalid VLESS identifier"\n'
+                  '\tcase strings.Contains(message, "port"), strings.Contains(message, "address"), strings.Contains(message, "domain"):\n'
+                  '\t\treturn "invalid server address or port"\n'
+                  '\tcase strings.Contains(message, "transport"), strings.Contains(message, "network"), strings.Contains(message, "xhttp"), strings.Contains(message, "splithttp"):\n'
+                  '\t\treturn "unsupported or invalid transport settings"\n'
+                  '\tcase strings.Contains(message, "tls"), strings.Contains(message, "reality"), strings.Contains(message, "security"):\n'
+                  '\t\treturn "invalid TLS/Reality settings"\n'
+                  '\tdefault:\n'
+                  '\t\treturn "Xray rejected the outbound configuration"\n'
+                  '\t}\n'
+                  '}\n'
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in source:
+                  raise SystemExit("Expected libXray source block not found; refusing to modify an unexpected version")
+              source = source.replace(old, new, 1)
+
+          path.write_text(source)
+          print("Applied safe outbound validation diagnostics")
+          PY
+          gofmt -w share/validate_outbound.go
+          grep -q "classifyOutboundBuildError" share/validate_outbound.go
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           export LIBXRAY_ANDROID_API=26
           python3 build/main.py android
