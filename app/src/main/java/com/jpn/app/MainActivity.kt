@@ -216,11 +216,22 @@ class MainActivity : Activity() {
                 }
 
                 mainHandler.post {
+                    // Keep per-server security overrides when the subscription is refreshed.
+                    val previousOverrides = nodes.mapNotNull { node ->
+                        val override = node.optString("jpnSecurityOverride")
+                        val identity = nodeIdentity(node)
+                        if (override.isNotBlank() && identity.isNotBlank()) identity to override else null
+                    }.toMap()
+                    imported.forEach { node ->
+                        val identity = nodeIdentity(node)
+                        val override = previousOverrides[identity]
+                        if (override != null) applySecurityOverride(node, override)
+                    }
                     nodes.clear()
                     nodes.addAll(imported)
+                    saveNodes()
                     preferences.edit()
                         .putString(KEY_SUBSCRIPTION_CONTENT, subscriptionText)
-                        .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
@@ -613,6 +624,61 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun saveNodes() {
+        preferences.edit().putString(KEY_SAVED_NODES, JSONArray(nodes).toString()).apply()
+    }
+
+    /**
+     * Stable identity used only to carry a user's local security choice across
+     * subscription refreshes. It contains no credentials.
+     */
+    private fun nodeIdentity(node: JSONObject): String {
+        val protocol = node.optString("protocol")
+        val settings = node.optJSONObject("settings") ?: JSONObject()
+        val vnext = settings.optJSONArray("vnext")?.optJSONObject(0)
+        val servers = settings.optJSONArray("servers")?.optJSONObject(0)
+        val address = vnext?.optString("address").orEmpty().ifBlank {
+            servers?.optString("address").orEmpty()
+        }
+        val port = (vnext?.optInt("port") ?: 0).takeIf { it > 0 }
+            ?: (servers?.optInt("port") ?: 0)
+        val stream = node.optJSONObject("streamSettings") ?: JSONObject()
+        val network = stream.optString("network")
+        if (protocol.isBlank() || address.isBlank() || port <= 0) return ""
+        return "$protocol|$address|$port|$network"
+    }
+
+    private fun applySecurityOverride(node: JSONObject, security: String) {
+        if (security != "tls" && security != "none") return
+        val stream = node.optJSONObject("streamSettings") ?: JSONObject().also {
+            node.put("streamSettings", it)
+        }
+        stream.put("security", security)
+        if (security == "tls" && !stream.has("tlsSettings")) {
+            stream.put("tlsSettings", JSONObject())
+        }
+        node.put("jpnSecurityOverride", security)
+    }
+
+    private fun showSecuritySettings(node: JSONObject, name: String) {
+        val stream = node.optJSONObject("streamSettings") ?: JSONObject()
+        val current = stream.optString("security").ifBlank { "none" }
+        val options = arrayOf("TLS", "Без TLS (none)")
+        val selected = if (current == "tls") 0 else 1
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Защита: $name")
+            .setSingleChoiceItems(options, selected) { dialog, which ->
+                val security = if (which == 0) "tls" else "none"
+                applySecurityOverride(node, security)
+                saveNodes()
+                renderNodes()
+                setStatus("Для «$name» сохранена защита: ${options[which]}. Можно подключаться.")
+                dialog.dismiss()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
     private fun safeImportError(message: String?): String {
         val error = message.orEmpty().lowercase()
         return when {
@@ -659,6 +725,16 @@ class MainActivity : Activity() {
                 setOnClickListener { connectToOutbound(node, name) }
             }
             nodesContainer.addView(button, matchWidth())
+            if (!needsValidation && nodeIdentity(node).isNotBlank()) {
+                val stream = node.optJSONObject("streamSettings") ?: JSONObject()
+                val security = stream.optString("security").ifBlank { "none" }
+                val settingsButton = Button(this).apply {
+                    text = "Защита: ${if (security == "tls") "TLS" else security}"
+                    textSize = 12f
+                    setOnClickListener { showSecuritySettings(node, name) }
+                }
+                nodesContainer.addView(settingsButton, matchWidth())
+            }
         }
     }
 
