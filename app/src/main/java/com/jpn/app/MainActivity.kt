@@ -114,48 +114,83 @@ class MainActivity : Activity() {
     }
 
     private fun buildScreen() {
-        val content = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(24), dp(22), dp(24))
+            setPadding(dp(20), dp(18), dp(20), dp(18))
         }
 
         val title = TextView(this).apply {
             text = "JPN"
-            textSize = 32f
+            textSize = 30f
             gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(10))
         }
-        val subtitle = TextView(this).apply {
-            text = "VPN на базе Xray"
-            textSize = 16f
-            gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(18))
-        }
+
         statusView = TextView(this).apply {
             text = "Отключено"
-            textSize = 16f
+            textSize = 14f
             gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(16))
-            // Allow long-press selection and copying of subscription diagnostics.
+            setPadding(dp(8), dp(4), dp(8), dp(12))
             setTextIsSelectable(true)
         }
 
-        val subscriptionTitle = sectionTitle("Подписка")
+        // The subscription field remains available to the existing import
+        // pipeline, but is no longer part of the main screen.
         subscriptionInput = EditText(this).apply {
             hint = "https://адрес-подписки"
             setSingleLine(true)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_URI
             setText(preferences.getString(KEY_SUBSCRIPTION_URL, ""))
+            visibility = android.view.View.GONE
         }
         loadSubscriptionButton = Button(this).apply {
             text = "Загрузить / обновить подписку"
+            visibility = android.view.View.GONE
             setOnClickListener { loadSubscription() }
         }
+
+        val vpnButton = Button(this).apply {
+            text = "ВКЛ / ВЫКЛ"
+            textSize = 17f
+            isAllCaps = false
+            gravity = Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(0xFF258A45.toInt())
+                setStroke(dp(3), 0xFF176B34.toInt())
+            }
+            setOnClickListener {
+                pendingSelectedOutbound = null
+                pendingSelectedName = null
+                if (isVpnRunning()) {
+                    XrayVpnService.stop(this@MainActivity)
+                    setStatus("Отключение VPN…")
+                } else {
+                    val selected = nodes.getOrNull(selectedNodeIndex)
+                    if (selected == null) {
+                        setStatus("Сначала выбери сервер")
+                    } else {
+                        val name = selected.optString("tag")
+                            .ifBlank { "Сервер ${selectedNodeIndex + 1}" }
+                        connectToOutbound(selected, name)
+                    }
+                }
+            }
+        }
+        root.addView(title, matchWidth())
+        root.addView(vpnButton, LinearLayout.LayoutParams(dp(156), dp(156)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(8)
+        })
+        root.addView(statusView, matchWidth())
+
         nodesHeader = TextView(this).apply {
-            text = "Серверы пока не загружены"
-            textSize = 15f
-            setPadding(0, dp(14), 0, dp(6))
+            text = "Серверы пока не добавлены"
+            textSize = 16f
+            setPadding(dp(12), dp(12), dp(4), dp(8))
         }
         val nodesMenuButton = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_edit)
@@ -179,6 +214,7 @@ class MainActivity : Activity() {
             addView(nodesHeader, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(nodesMenuButton, LinearLayout.LayoutParams(dp(44), dp(44)))
         }
+
         nodesContainer = ListView(this).apply {
             divider = android.graphics.drawable.ColorDrawable(0xFFD6D6D6.toInt())
             dividerHeight = dp(1)
@@ -192,7 +228,6 @@ class MainActivity : Activity() {
                 if (isVpnRunning()) {
                     connectToOutbound(node, name)
                 } else {
-                    hideKeyboard()
                     setStatus("Выбран сервер: $name. VPN выключен — для подключения нажми «Вкл/Выкл».")
                 }
             }
@@ -209,57 +244,87 @@ class MainActivity : Activity() {
             }
         }
 
-        val pasteButton = Button(this).apply {
-            text = "Вставить ссылку из буфера"
-            setOnClickListener { pasteFromClipboard() }
+        val serverCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFF4F5F6.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0xFFD9DDE1.toInt())
+            }
+            clipToOutline = true
+            addView(nodesHeaderRow, matchWidth())
+            addView(nodesContainer, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(280)
+            ))
         }
+        root.addView(serverCard, matchWidth())
 
-        val scanQrButton = Button(this).apply {
-            text = "Сканировать QR-код"
-            setOnClickListener { scanSubscriptionQr() }
+        val spacer = android.view.View(this)
+        root.addView(spacer, LinearLayout.LayoutParams(1, 0, 1f))
+
+        val bottomRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
         }
-        val disconnectButton = Button(this).apply {
-            text = "Вкл/Выкл"
-            setOnClickListener {
-                pendingSelectedOutbound = null
-                pendingSelectedName = null
-                if (isVpnRunning()) {
-                    XrayVpnService.stop(this@MainActivity)
-                    setStatus("Отключение VPN…")
-                } else {
-                    val selected = nodes.getOrNull(selectedNodeIndex)
-                    if (selected == null) {
-                        setStatus("Сначала выбери сервер")
-                    } else {
-                        val name = selected.optString("tag")
-                            .ifBlank { "Сервер ${selectedNodeIndex + 1}" }
-                        connectToOutbound(selected, name)
+        val addButton = Button(this).apply {
+            text = "+"
+            textSize = 30f
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(0, 0, 0, dp(3))
+            contentDescription = "Добавить подписку"
+            setTextColor(android.graphics.Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(0xFF258A45.toInt())
+            }
+            setOnClickListener { anchor ->
+                android.widget.PopupMenu(this@MainActivity, anchor).apply {
+                    menu.add("Ввести ссылку вручную").setOnMenuItemClickListener {
+                        showManualSubscriptionDialog()
+                        true
                     }
-                }
+                    menu.add("Вставить ссылку из буфера").setOnMenuItemClickListener {
+                        pasteFromClipboard()
+                        val value = subscriptionInput.text.toString().trim()
+                        if (value.startsWith("https://", ignoreCase = true)) loadSubscription()
+                        true
+                    }
+                    menu.add("Сканировать QR-код").setOnMenuItemClickListener {
+                        scanSubscriptionQr()
+                        true
+                    }
+                }.show()
             }
         }
-
-        content.addView(title, matchWidth())
-        content.addView(subtitle, matchWidth())
-        content.addView(statusView, matchWidth())
-        content.addView(subscriptionTitle, matchWidth())
-        content.addView(subscriptionInput, matchWidth())
-        content.addView(pasteButton, matchWidth())
-        content.addView(scanQrButton, matchWidth())
-        content.addView(loadSubscriptionButton, matchWidth())
-        content.addView(nodesHeaderRow, matchWidth())
-        content.addView(nodesContainer, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(260)
-        ))
-        content.addView(disconnectButton, matchWidth())
-
+        bottomRow.addView(addButton, LinearLayout.LayoutParams(dp(60), dp(60)))
+        root.addView(bottomRow, matchWidth())
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            addView(content)
+            addView(root)
         }
         setContentView(scroll)
+    }
+
+    private fun showManualSubscriptionDialog() {
+        val input = EditText(this).apply {
+            hint = "https://адрес-подписки"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(subscriptionInput.text)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Добавить подписку")
+            .setView(input)
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Загрузить") { _, _ ->
+                subscriptionInput.setText(input.text.toString().trim())
+                loadSubscription()
+            }
+            .show()
     }
 
     private fun sectionTitle(value: String) = TextView(this).apply {
