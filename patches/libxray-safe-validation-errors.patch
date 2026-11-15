@@ -1,0 +1,59 @@
+diff --git a/share/validate_outbound.go b/share/validate_outbound.go
+index 0000000..0000000 100644
+--- a/share/validate_outbound.go
++++ b/share/validate_outbound.go
+@@ -1,10 +1,11 @@
+ package share
+ 
+ import (
+ 	"bytes"
+ 	"encoding/json"
+ 	"fmt"
+ 	"reflect"
++	"strings"
+ 
+ 	"github.com/xtls/xray-core/infra/conf"
+ )
+@@ -21,12 +22,20 @@ func filterBuildableOutbounds(config *conf.Config) (*conf.Config, error) {
+ 
+ 	validOutbounds := make([]conf.OutboundDetourConfig, 0, len(config.OutboundConfigs))
++	buildErrorCategories := make(map[string]struct{})
+ 	for index := range validationOutbounds {
+-		if _, err := validationOutbounds[index].Build(); err != nil {
++		if _, err := validationOutbounds[index].Build(); err != nil {
++			buildErrorCategories[classifyOutboundBuildError(err)] = struct{}{}
+ 			continue
+ 		}
+ 		validOutbounds = append(validOutbounds, config.OutboundConfigs[index])
+ 	}
+ 	if len(validOutbounds) == 0 {
+-		return nil, fmt.Errorf("no valid outbound found")
++		if len(buildErrorCategories) == 1 {
++			for category := range buildErrorCategories {
++				return nil, fmt.Errorf("no valid outbound found: %s", category)
++			}
++		}
++		return nil, fmt.Errorf("no valid outbound found: Xray rejected the configuration")
+ 	}
+ 
+ 	config.OutboundConfigs = validOutbounds
+ 	return config, nil
+ }
++
++// classifyOutboundBuildError deliberately returns only a small, non-sensitive
++// category. The original Xray error can contain server addresses or credentials.
++func classifyOutboundBuildError(err error) string {
++	message := strings.ToLower(err.Error())
++	switch {
++	case strings.Contains(message, "uuid"), strings.Contains(message, "user id"), strings.Contains(message, "vless id"):
++		return "invalid VLESS identifier"
++	case strings.Contains(message, "port"), strings.Contains(message, "address"), strings.Contains(message, "domain"):
++		return "invalid server address or port"
++	case strings.Contains(message, "transport"), strings.Contains(message, "network"), strings.Contains(message, "xhttp"), strings.Contains(message, "splithttp"):
++		return "unsupported or invalid transport settings"
++	case strings.Contains(message, "tls"), strings.Contains(message, "reality"), strings.Contains(message, "security"):
++		return "invalid TLS/Reality settings"
++	default:
++		return "Xray rejected the outbound configuration"
++	}
++}
