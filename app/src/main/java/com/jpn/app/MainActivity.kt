@@ -262,6 +262,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(280)
             ))
         }
+        serverCard.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         root.addView(serverCard, matchWidth())
 
         val addButton = Button(this).apply {
@@ -299,11 +300,17 @@ class MainActivity : Activity() {
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT
         ))
-        screen.addView(addButton, android.widget.FrameLayout.LayoutParams(dp(60), dp(60)).apply {
+        val addButtonParams = android.widget.FrameLayout.LayoutParams(dp(60), dp(60)).apply {
             gravity = Gravity.BOTTOM or Gravity.END
             marginEnd = dp(20)
             bottomMargin = dp(16)
-        })
+        }
+        screen.addView(addButton, addButtonParams)
+        screen.setOnApplyWindowInsetsListener { _, insets ->
+            addButtonParams.bottomMargin = dp(16) + insets.systemWindowInsetBottom
+            addButton.layoutParams = addButtonParams
+            insets
+        }
         setContentView(screen)
     }
 
@@ -834,6 +841,8 @@ class MainActivity : Activity() {
             }
         }
         nodesContainer.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        (nodesContainer.parent as? android.view.View)?.visibility =
+            if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     private fun connectToOutbound(outbound: JSONObject, name: String) {
