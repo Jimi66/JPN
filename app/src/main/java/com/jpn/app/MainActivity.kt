@@ -756,11 +756,11 @@ class MainActivity : Activity() {
         ) {
             override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
                 val row = super.getView(position, convertView, parent) as TextView
-                row.paintFlags = if (position == selectedNodeIndex) {
-                    row.paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
-                } else {
-                    row.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
-                }
+                row.paintFlags = row.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
+                row.setBackgroundColor(
+                    if (position == selectedNodeIndex) 0xFFD8F5D0.toInt()
+                    else android.graphics.Color.TRANSPARENT
+                )
                 return row
             }
         }
