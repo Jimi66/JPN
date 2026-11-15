@@ -13,7 +13,7 @@ diff --git a/share/validate_outbound.go b/share/validate_outbound.go
  
  	"github.com/xtls/xray-core/infra/conf"
  )
-@@ -24,14 +25,35 @@ func filterBuildableOutbounds(config *conf.Config) (*conf.Config, error) {
+@@ -24,14 +24,39 @@ func filterBuildableOutbounds(config *conf.Config) (*conf.Config, error) {
  	validOutbounds := make([]conf.OutboundDetourConfig, 0, len(config.OutboundConfigs))
 +	buildErrorCategories := make(map[string]struct{})
  	for index := range validationOutbounds {
