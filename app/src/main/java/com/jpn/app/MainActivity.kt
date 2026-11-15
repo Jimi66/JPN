@@ -40,7 +40,6 @@ class MainActivity : Activity() {
         private const val PREFS = "jpn_settings"
 
         private const val KEY_SUBSCRIPTION_URL = "subscription_url"
-        private const val KEY_SUBSCRIPTION_NAME = "subscription_name"
         private const val KEY_SUBSCRIPTION_CONTENT = "subscription_content"
         private const val KEY_SAVED_NODES = "saved_nodes_json"
         private const val KEY_VPN_STATE = "vpn_state"
@@ -54,8 +53,6 @@ class MainActivity : Activity() {
 
     private lateinit var statusView: TextView
     private lateinit var subscriptionInput: EditText
-    private lateinit var subscriptionNameInput: EditText
-    private lateinit var subscriptionNameHeader: TextView
 
     private lateinit var loadSubscriptionButton: Button
     private lateinit var nodesContainer: ListView
@@ -143,21 +140,6 @@ class MainActivity : Activity() {
                 android.text.InputType.TYPE_TEXT_VARIATION_URI
             setText(preferences.getString(KEY_SUBSCRIPTION_URL, ""))
         }
-        subscriptionNameInput = EditText(this).apply {
-            hint = "Название подписки"
-            setSingleLine(true)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setText(preferences.getString(KEY_SUBSCRIPTION_NAME, ""))
-            addTextChangedListener(object : android.text.TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    preferences.edit().putString(KEY_SUBSCRIPTION_NAME, s?.toString().orEmpty()).apply()
-                    updateSubscriptionNameHeader()
-                }
-                override fun afterTextChanged(s: android.text.Editable?) {}
-            })
-        }
         loadSubscriptionButton = Button(this).apply {
             text = "Загрузить / обновить подписку"
             setOnClickListener { loadSubscription() }
@@ -165,11 +147,6 @@ class MainActivity : Activity() {
         val deleteSubscriptionButton = Button(this).apply {
             text = "Удалить подписку"
             setOnClickListener { confirmDeleteSubscription() }
-        }
-        subscriptionNameHeader = TextView(this).apply {
-            textSize = 17f
-            setPadding(0, dp(16), 0, dp(4))
-            setTypeface(null, android.graphics.Typeface.BOLD)
         }
         nodesHeader = TextView(this).apply {
             text = "Серверы пока не загружены"
@@ -241,13 +218,10 @@ class MainActivity : Activity() {
         content.addView(statusView, matchWidth())
         content.addView(subscriptionTitle, matchWidth())
         content.addView(subscriptionInput, matchWidth())
-        content.addView(sectionTitle("Название подписки"), matchWidth())
-        content.addView(subscriptionNameInput, matchWidth())
         content.addView(pasteButton, matchWidth())
         content.addView(scanQrButton, matchWidth())
         content.addView(loadSubscriptionButton, matchWidth())
         content.addView(deleteSubscriptionButton, matchWidth())
-        content.addView(subscriptionNameHeader, matchWidth())
         content.addView(nodesHeader, matchWidth())
         content.addView(nodesContainer, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -261,7 +235,6 @@ class MainActivity : Activity() {
             addView(content)
         }
         setContentView(scroll)
-        updateSubscriptionNameHeader()
     }
 
     private fun sectionTitle(value: String) = TextView(this).apply {
@@ -293,7 +266,6 @@ class MainActivity : Activity() {
                     nodes.addAll(imported)
                     preferences.edit()
                         .putString(KEY_SUBSCRIPTION_CONTENT, subscriptionText)
-                        .putString(KEY_SUBSCRIPTION_NAME, subscriptionNameInput.text.toString())
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     renderNodes()
@@ -688,12 +660,10 @@ class MainActivity : Activity() {
             .setPositiveButton("Удалить") { _, _ ->
                 preferences.edit()
                     .remove(KEY_SUBSCRIPTION_URL)
-                    .remove(KEY_SUBSCRIPTION_NAME)
                     .remove(KEY_SUBSCRIPTION_CONTENT)
                     .remove(KEY_SAVED_NODES)
                     .apply()
                 subscriptionInput.setText("")
-                subscriptionNameInput.setText("")
                 nodes.clear()
                 renderNodes()
                 setStatus("Подписка и сохранённые серверы удалены")
@@ -743,17 +713,10 @@ class MainActivity : Activity() {
             ?: throw IllegalArgumentException("Xray не вернул список серверов")
     }
 
-    private fun updateSubscriptionNameHeader() {
-        val name = subscriptionNameInput.text.toString().trim()
-        subscriptionNameHeader.text = name.ifBlank { "Подписка" }
-        subscriptionNameHeader.visibility = if (name.isBlank() && nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
-    }
-
     private fun renderNodes() {
         // ListView is an AdapterView: its rows are owned by the adapter.
         // Calling removeAllViews() here throws UnsupportedOperationException
         // and crashes the activity after subscription/QR import.
-        updateSubscriptionNameHeader()
         nodesHeader.text = if (nodes.isEmpty()) {
             "Серверы не найдены"
         } else {
