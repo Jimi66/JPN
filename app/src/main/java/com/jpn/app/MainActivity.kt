@@ -221,7 +221,7 @@ class MainActivity : Activity() {
                     val rejectedIndexes = findRejectedCandidateIndexes(subscriptionText)
                     val rejected = (sourceCount - nodes.size).coerceAtLeast(0)
                     val rejectedDetails = if (rejectedIndexes.isNotEmpty()) {
-                        "; не прошли проверку записи №${rejectedIndexes.joinToString(", ")}"
+                        "; отклонены: ${rejectedIndexes.joinToString("; ")}"
                     } else {
                         ""
                     }
@@ -355,9 +355,9 @@ class MainActivity : Activity() {
      * entry numbers are rejected by libXray. No link contents or credentials
      * are logged or shown to the user.
      */
-    private fun findRejectedCandidateIndexes(text: String): List<Int> {
+    private fun findRejectedCandidateIndexes(text: String): List<String> {
         val source = text.removePrefix("\uFEFF").trim()
-        val candidates = mutableListOf<String>()
+        val candidates = mutableListOf<Pair<String, String>>()
 
         if (source.startsWith("{")) {
             val outbounds = runCatching {
@@ -365,8 +365,10 @@ class MainActivity : Activity() {
             }.getOrNull()
             if (outbounds != null) {
                 for (i in 0 until outbounds.length()) {
-                    val config = JSONObject().put("outbounds", JSONArray().put(outbounds.get(i)))
-                    candidates.add(config.toString())
+                    val outbound = outbounds.optJSONObject(i) ?: continue
+                    val protocol = outbound.optString("protocol").ifBlank { "неизвестный протокол" }
+                    val config = JSONObject().put("outbounds", JSONArray().put(outbound))
+                    candidates.add(config.toString() to protocol)
                 }
             }
         } else {
@@ -376,34 +378,48 @@ class MainActivity : Activity() {
                     line.contains("://") &&
                         scheme.matches(Regex("(?i)vless|vmess|trojan|ss|socks|hysteria2|hy2"))
                 }
-            candidates.addAll(lines)
+            for (line in lines) {
+                val protocol = line.substringBefore("://").uppercase()
+                    .let { if (it == "HY2") "HYSTERIA2" else it }
+                candidates.add(line to protocol)
+            }
         }
 
         if (candidates.isEmpty()) {
             val compact = source.filterNot { it.isWhitespace() }
-            val decoded = runCatching {
-                String(Base64.decode(compact, Base64.DEFAULT), StandardCharsets.UTF_8).trim()
-            }.getOrNull()
-            if (!decoded.isNullOrBlank() && decoded != source) {
-                return findRejectedCandidateIndexes(decoded)
+            val flags = intArrayOf(Base64.DEFAULT, Base64.URL_SAFE or Base64.NO_WRAP)
+            for (flag in flags) {
+                val decoded = runCatching {
+                    String(Base64.decode(compact, flag), StandardCharsets.UTF_8).trim()
+                }.getOrNull() ?: continue
+                if (decoded.isNotBlank() && decoded != source) {
+                    val result = findRejectedCandidateIndexes(decoded)
+                    if (result.isNotEmpty()) return result
+                }
             }
             return emptyList()
         }
 
         return candidates.mapIndexedNotNull { index, candidate ->
-            val result = runCatching {
+            val accepted = runCatching {
                 val response = JSONObject(
                     LibXray.invoke(
                         JSONObject()
                             .put("apiVersion", 3)
                             .put("method", "convertShareLinksToXrayJson")
-                            .put("payload", JSONObject().put("text", candidate))
+                            .put("payload", JSONObject().put("text", candidate.first))
                             .toString()
                     )
                 )
                 response.optBoolean("success", false)
             }.getOrDefault(false)
-            if (result) null else index + 1
+
+            if (accepted) {
+                null
+            } else {
+                // libXray hides raw builder errors because they may contain credentials.
+                "№${index + 1} (${candidate.second}): ошибка проверки/сборки конфигурации Xray"
+            }
         }
     }
 
