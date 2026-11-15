@@ -409,8 +409,8 @@ class MainActivity : Activity() {
         }
 
         return candidates.mapIndexedNotNull { index, candidate ->
-            val accepted = runCatching {
-                val response = JSONObject(
+            val validation = runCatching {
+                JSONObject(
                     LibXray.invoke(
                         JSONObject()
                             .put("apiVersion", 3)
@@ -419,14 +419,21 @@ class MainActivity : Activity() {
                             .toString()
                     )
                 )
-                response.optBoolean("success", false)
-            }.getOrDefault(false)
+            }.getOrNull()
 
-            if (accepted) {
+            if (validation?.optBoolean("success", false) == true) {
                 null
             } else {
-                // libXray hides raw builder errors because they may contain credentials.
-                "№${index + 1} (${candidate.second}): ошибка проверки/сборки конфигурации Xray"
+                val rawError = validation?.optString("error").orEmpty().lowercase()
+                val safeReason = when {
+                    "invalid vless identifier" in rawError -> "неверный идентификатор VLESS"
+                    "invalid server address or port" in rawError -> "неверный адрес сервера или порт"
+                    "unsupported or invalid transport settings" in rawError -> "неподдерживаемые или некорректные параметры транспорта"
+                    "invalid tls/reality settings" in rawError -> "некорректные параметры TLS/Reality"
+                    "xray rejected the outbound configuration" in rawError -> "Xray отклонил конфигурацию"
+                    else -> "ошибка разбора или проверки конфигурации Xray"
+                }
+                "№${index + 1} (${candidate.second}): $safeReason"
             }
         }
     }
