@@ -684,7 +684,9 @@ class MainActivity : Activity() {
 
     private fun showSecuritySettings(node: JSONObject, name: String) {
         val stream = node.optJSONObject("streamSettings") ?: JSONObject()
-        val current = stream.optString("security").ifBlank { "none" }
+        val current = node.optString("jpnSecurityOverride").ifBlank {
+            stream.optString("security").ifBlank { "none" }
+        }
         val options = arrayOf("TLS", "Без TLS (none)")
         val selected = if (current == "tls") 0 else 1
         android.app.AlertDialog.Builder(this)
@@ -749,7 +751,9 @@ class MainActivity : Activity() {
             nodesContainer.addView(button, matchWidth())
             if (isSecurityEditable(node) && nodeIdentity(node).isNotBlank()) {
                 val stream = node.optJSONObject("streamSettings") ?: JSONObject()
-                val security = stream.optString("security").ifBlank { "none" }
+                val security = node.optString("jpnSecurityOverride").ifBlank {
+                    stream.optString("security").ifBlank { "none" }
+                }
                 val settingsButton = Button(this).apply {
                     text = "Защита: ${if (security == "tls") "TLS" else security}"
                     textSize = 12f
