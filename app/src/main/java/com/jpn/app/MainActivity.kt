@@ -18,6 +18,8 @@ import android.view.inputmethod.InputMethodManager.HIDE_NOT_ALWAYS
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ListView
+import android.widget.ArrayAdapter
 import android.widget.ScrollView
 import android.widget.TextView
 import libXray.LibXray
@@ -52,7 +54,7 @@ class MainActivity : Activity() {
     private lateinit var subscriptionInput: EditText
 
     private lateinit var loadSubscriptionButton: Button
-    private lateinit var nodesContainer: LinearLayout
+    private lateinit var nodesContainer: ListView
     private lateinit var nodesHeader: TextView
     private var pendingXrayConfig: String? = null
     private var pendingSelectedOutbound: JSONObject? = null
@@ -145,8 +147,26 @@ class MainActivity : Activity() {
             textSize = 15f
             setPadding(0, dp(14), 0, dp(6))
         }
-        nodesContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        nodesContainer = ListView(this).apply {
+            divider = android.graphics.drawable.ColorDrawable(0xFFD6D6D6.toInt())
+            dividerHeight = dp(1)
+            choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
+            setOnItemClickListener { _, _, position, _ ->
+                val node = nodes.getOrNull(position) ?: return@setOnItemClickListener
+                val name = node.optString("tag").ifBlank { "Сервер ${position + 1}" }
+                connectToOutbound(node, name)
+            }
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN,
+                    android.view.MotionEvent.ACTION_MOVE ->
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL ->
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false
+            }
         }
 
         val pasteButton = Button(this).apply {
@@ -177,7 +197,10 @@ class MainActivity : Activity() {
         content.addView(scanQrButton, matchWidth())
         content.addView(loadSubscriptionButton, matchWidth())
         content.addView(nodesHeader, matchWidth())
-        content.addView(nodesContainer, matchWidth())
+        content.addView(nodesContainer, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(260)
+        ))
         content.addView(disconnectButton, matchWidth())
 
 
@@ -653,15 +676,16 @@ class MainActivity : Activity() {
             "Доступные серверы: ${nodes.size}. Нажми на сервер для подключения:"
         }
 
-        nodes.forEachIndexed { index, node ->
+        val labels = nodes.mapIndexed { index, node ->
             val name = node.optString("tag").ifBlank { "Сервер ${index + 1}" }
-            val needsValidation = node.optBoolean("jpnNeedsValidation", false)
-            val button = Button(this).apply {
-                text = if (needsValidation) "$name · не проверен" else name
-                setOnClickListener { connectToOutbound(node, name) }
-            }
-            nodesContainer.addView(button, matchWidth())
+            if (node.optBoolean("jpnNeedsValidation", false)) "$name · не проверен" else name
         }
+        nodesContainer.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_list_item_1,
+            labels
+        )
+        nodesContainer.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     private fun connectToOutbound(outbound: JSONObject, name: String) {
