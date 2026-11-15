@@ -84,6 +84,13 @@ class MainActivity : Activity() {
         buildScreen()
         restoreSavedSubscription()
         refreshVpnState()
+        if (nodes.isEmpty()) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Серверы не добавлены")
+                .setMessage("Нажмите «+», чтобы добавить подписку.")
+                .setPositiveButton("Понятно", null)
+                .show()
+        }
     }
 
     override fun onStart() {
