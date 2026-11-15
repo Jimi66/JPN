@@ -20,6 +20,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ArrayAdapter
+import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
 import libXray.LibXray
@@ -144,14 +145,32 @@ class MainActivity : Activity() {
             text = "Загрузить / обновить подписку"
             setOnClickListener { loadSubscription() }
         }
-        val deleteSubscriptionButton = Button(this).apply {
-            text = "Удалить подписку"
-            setOnClickListener { confirmDeleteSubscription() }
-        }
         nodesHeader = TextView(this).apply {
             text = "Серверы пока не загружены"
             textSize = 15f
             setPadding(0, dp(14), 0, dp(6))
+        }
+        val nodesMenuButton = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_edit)
+            contentDescription = "Изменить список серверов"
+            val selectableBackground = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, selectableBackground, true)
+            background = getDrawable(selectableBackground.resourceId)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setOnClickListener { anchor ->
+                android.widget.PopupMenu(this@MainActivity, anchor).apply {
+                    menu.add("Удалить подписку").setOnMenuItemClickListener {
+                        confirmDeleteSubscription()
+                        true
+                    }
+                }.show()
+            }
+        }
+        val nodesHeaderRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(nodesHeader, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(nodesMenuButton, LinearLayout.LayoutParams(dp(44), dp(44)))
         }
         nodesContainer = ListView(this).apply {
             divider = android.graphics.drawable.ColorDrawable(0xFFD6D6D6.toInt())
@@ -221,8 +240,7 @@ class MainActivity : Activity() {
         content.addView(pasteButton, matchWidth())
         content.addView(scanQrButton, matchWidth())
         content.addView(loadSubscriptionButton, matchWidth())
-        content.addView(deleteSubscriptionButton, matchWidth())
-        content.addView(nodesHeader, matchWidth())
+        content.addView(nodesHeaderRow, matchWidth())
         content.addView(nodesContainer, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             dp(260)
