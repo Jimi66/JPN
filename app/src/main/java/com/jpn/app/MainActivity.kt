@@ -867,14 +867,19 @@ class MainActivity : Activity() {
     }
 
     private fun handleScannedQr(value: String) {
+        // Always show the exact text recognized by the QR scanner in the
+        // subscription field before starting the corresponding import flow.
+        subscriptionInput.setText(value)
+        subscriptionInput.setSelection(subscriptionInput.text.length)
+
         if (value.startsWith("https://", ignoreCase = true)) {
-            subscriptionInput.setText(value)
-            subscriptionInput.setSelection(subscriptionInput.text.length)
             loadSubscription()
             return
         }
 
-        setStatus("Обрабатываю QR-код…")
+        // Raw share links / subscription payloads are parsed in the background
+        // immediately, just like pressing the subscription load action.
+        setStatus("Загружаю данные из QR-кода…")
         Thread {
             val imported = runCatching {
                 val decoded = decodeSubscriptionBody(value)
