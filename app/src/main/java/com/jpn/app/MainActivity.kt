@@ -21,6 +21,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import libXray.LibXray
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.jpn.app.vpn.XrayVpnService
 import org.json.JSONArray
 import org.json.JSONObject
@@ -152,6 +153,11 @@ class MainActivity : Activity() {
             text = "Вставить ссылку из буфера"
             setOnClickListener { pasteFromClipboard() }
         }
+
+        val scanQrButton = Button(this).apply {
+            text = "Сканировать QR-код"
+            setOnClickListener { scanSubscriptionQr() }
+        }
         val disconnectButton = Button(this).apply {
             text = "Отключить VPN"
             setOnClickListener {
@@ -168,6 +174,7 @@ class MainActivity : Activity() {
         content.addView(subscriptionTitle, matchWidth())
         content.addView(subscriptionInput, matchWidth())
         content.addView(pasteButton, matchWidth())
+        content.addView(scanQrButton, matchWidth())
         content.addView(loadSubscriptionButton, matchWidth())
         content.addView(nodesHeader, matchWidth())
         content.addView(nodesContainer, matchWidth())
@@ -750,6 +757,52 @@ class MainActivity : Activity() {
         } catch (error: Exception) {
             setStatus("Не удалось запустить VPN: ${error.message ?: "ошибка"}")
         }
+    }
+
+    private fun scanSubscriptionQr() {
+        setStatus("Открываю сканер QR-кода…")
+        GmsBarcodeScanning.getClient(this)
+            .startScan()
+            .addOnSuccessListener { barcode ->
+                val value = barcode.rawValue?.trim()
+                if (value.isNullOrBlank()) {
+                    setStatus("В QR-коде нет текста")
+                } else {
+                    handleScannedQr(value)
+                }
+            }
+            .addOnCanceledListener {
+                setStatus("Сканирование QR-кода отменено")
+            }
+            .addOnFailureListener {
+                setStatus("Не удалось открыть сканер QR-кодов")
+            }
+    }
+
+    private fun handleScannedQr(value: String) {
+        if (value.startsWith("https://", ignoreCase = true)) {
+            subscriptionInput.setText(value)
+            subscriptionInput.setSelection(subscriptionInput.text.length)
+            loadSubscription()
+            return
+        }
+
+        val decoded = runCatching { decodeSubscriptionBody(value) }.getOrDefault(value)
+        val imported = runCatching { parseSubscriptionEntries(decoded) }.getOrElse {
+            setStatus("QR распознан, но ссылка не поддерживается")
+            return
+        }
+        if (imported.isEmpty()) {
+            setStatus("В QR-коде не найдено серверов с защитой TLS или REALITY")
+            return
+        }
+
+        nodes.addAll(imported)
+        preferences.edit()
+            .putString(KEY_SAVED_NODES, JSONArray(nodes).toString())
+            .apply()
+        renderNodes()
+        setStatus("Из QR-кода добавлено серверов: ${imported.size}. Всего в списке: ${nodes.size}")
     }
 
     private fun pasteFromClipboard() {
