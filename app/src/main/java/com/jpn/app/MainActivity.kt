@@ -225,8 +225,14 @@ class MainActivity : Activity() {
                     } else {
                         ""
                     }
+                    val parameterDetails = describeSubscriptionCandidates(subscriptionText)
+                    val parameterSummary = if (parameterDetails.isNotEmpty()) {
+                        "; параметры VLESS: ${parameterDetails.joinToString("; ")}"
+                    } else {
+                        ""
+                    }
                     val diagnostic = if (sourceCount > 0) {
-                        "Подписка: найдено $sourceCount, принято ${nodes.size}, отклонено $rejected$rejectedDetails"
+                        "Подписка: найдено $sourceCount, принято ${nodes.size}, отклонено $rejected$rejectedDetails$parameterSummary"
                     } else {
                         "Подписка загружена: серверов ${nodes.size} (формат источника не позволяет посчитать записи)"
                     }
@@ -420,6 +426,106 @@ class MainActivity : Activity() {
                 // libXray hides raw builder errors because they may contain credentials.
                 "№${index + 1} (${candidate.second}): ошибка проверки/сборки конфигурации Xray"
             }
+        }
+    }
+
+    /**
+     * Shows only non-secret VLESS transport/security metadata for comparison.
+     * Values such as server, UUID, password, SNI, keys, host and paths are never shown.
+     */
+    private fun describeSubscriptionCandidates(text: String): List<String> {
+        val source = text.removePrefix("\uFEFF").trim()
+        val candidates = mutableListOf<Pair<String, String>>()
+
+        if (source.startsWith("{")) {
+            val outbounds = runCatching {
+                JSONObject(source).optJSONArray("outbounds")
+            }.getOrNull()
+            if (outbounds != null) {
+                for (i in 0 until outbounds.length()) {
+                    val outbound = outbounds.optJSONObject(i) ?: continue
+                    if (!outbound.optString("protocol").equals("vless", true)) continue
+                    candidates.add("json" to outbound.toString())
+                }
+            }
+        } else {
+            source.lineSequence().map { it.trim() }
+                .filter { it.startsWith("vless://", true) }
+                .forEach { candidates.add("uri" to it) }
+        }
+
+        if (candidates.isEmpty()) {
+            val compact = source.filterNot { it.isWhitespace() }
+            val flags = intArrayOf(Base64.DEFAULT, Base64.URL_SAFE or Base64.NO_WRAP)
+            for (flag in flags) {
+                val decoded = runCatching {
+                    String(Base64.decode(compact, flag), StandardCharsets.UTF_8).trim()
+                }.getOrNull() ?: continue
+                if (decoded.isNotBlank() && decoded != source) {
+                    val result = describeSubscriptionCandidates(decoded)
+                    if (result.isNotEmpty()) return result
+                }
+            }
+            return emptyList()
+        }
+
+        return candidates.mapIndexed { index, candidate ->
+            val security: String
+            val network: String
+            val flowPresent: Boolean
+            val sniPresent: Boolean
+            val publicKeyPresent: Boolean
+            val shortIdPresent: Boolean
+            val fingerprintPresent: Boolean
+            val pathPresent: Boolean
+            val hostPresent: Boolean
+            val serviceNamePresent: Boolean
+
+            if (candidate.first == "json") {
+                val outbound = JSONObject(candidate.second)
+                val stream = outbound.optJSONObject("streamSettings") ?: JSONObject()
+                security = stream.optString("security").ifBlank { "не задана" }
+                network = stream.optString("network").ifBlank { "не задан" }
+                val settings = outbound.optJSONObject("settings") ?: JSONObject()
+                val vnext = settings.optJSONArray("vnext")
+                val user = vnext?.optJSONObject(0)?.optJSONArray("users")?.optJSONObject(0)
+                flowPresent = !user?.optString("flow").isNullOrBlank()
+                val tls = stream.optJSONObject("tlsSettings") ?: JSONObject()
+                val reality = stream.optJSONObject("realitySettings") ?: JSONObject()
+                sniPresent = !tls.optString("serverName").isBlank() ||
+                    !reality.optString("serverName").isBlank()
+                publicKeyPresent = !reality.optString("publicKey").isBlank()
+                shortIdPresent = !reality.optString("shortId").isBlank()
+                fingerprintPresent = !tls.optString("fingerprint").isBlank() ||
+                    !reality.optString("fingerprint").isBlank()
+                val transport = stream.optJSONObject("wsSettings")
+                    ?: stream.optJSONObject("httpSettings")
+                    ?: stream.optJSONObject("splithttpSettings")
+                    ?: JSONObject()
+                pathPresent = !transport.optString("path").isBlank()
+                hostPresent = !transport.optJSONObject("headers")?.optString("Host").isNullOrBlank() ||
+                    !transport.optString("host").isBlank()
+                serviceNamePresent = !stream.optJSONObject("grpcSettings")
+                    ?.optString("serviceName").isNullOrBlank()
+            } else {
+                val uri = android.net.Uri.parse(candidate.second)
+                security = uri.getQueryParameter("security") ?: "не задана"
+                network = uri.getQueryParameter("type") ?: "не задан"
+                flowPresent = !uri.getQueryParameter("flow").isNullOrBlank()
+                sniPresent = !uri.getQueryParameter("sni").isNullOrBlank()
+                publicKeyPresent = !uri.getQueryParameter("pbk").isNullOrBlank()
+                shortIdPresent = !uri.getQueryParameter("sid").isNullOrBlank()
+                fingerprintPresent = !uri.getQueryParameter("fp").isNullOrBlank()
+                pathPresent = !uri.getQueryParameter("path").isNullOrBlank()
+                hostPresent = !uri.getQueryParameter("host").isNullOrBlank()
+                serviceNamePresent = !uri.getQueryParameter("serviceName").isNullOrBlank()
+            }
+
+            fun yesNo(value: Boolean) = if (value) "есть" else "нет"
+            "№\${index + 1} security=$security, transport=$network, flow=\${yesNo(flowPresent)}, " +
+                "SNI=\${yesNo(sniPresent)}, pbk=\${yesNo(publicKeyPresent)}, sid=\${yesNo(shortIdPresent)}, " +
+                "fp=\${yesNo(fingerprintPresent)}, path=\${yesNo(pathPresent)}, host=\${yesNo(hostPresent)}, " +
+                "serviceName=\${yesNo(serviceNamePresent)}"
         }
     }
 
