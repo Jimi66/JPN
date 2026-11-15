@@ -123,7 +123,83 @@ jobs:
           path.write_text(source)
           print("Applied safe outbound validation diagnostics")
           PY
-          gofmt -w share/validate_outbound.go
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("share/parse_share.go")
+          source = path.read_text()
+          old = """\tif hasShareSchemeLine(text) {
+          \t\tfor raw := range strings.SplitSeq(text, "\\n") {
+          \t\t\tline := strings.TrimSpace(raw)
+          \t\t\t// Ignore subscription comments and text headers.
+          \t\t\tscheme, _, found := strings.Cut(line, "://")
+          \t\t\tif !found || strings.ContainsAny(scheme, " \\t#") {
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\toutbound, err := parseOutboundShareLink(line)
+          \t\t\tif err == nil {
+          \t\t\t\tconfig.OutboundConfigs = append(config.OutboundConfigs, *outbound)
+          \t\t\t}
+          \t\t}
+          \t\treturn config, nil
+          \t}
+          """
+          new = """\tif hasShareSchemeLine(text) {
+          \t\tparseErrorCategories := make(map[string]struct{})
+          \t\tfor raw := range strings.SplitSeq(text, "\\n") {
+          \t\t\tline := strings.TrimSpace(raw)
+          \t\t\t// Ignore subscription comments and text headers.
+          \t\t\tscheme, _, found := strings.Cut(line, "://")
+          \t\t\tif !found || strings.ContainsAny(scheme, " \\t#") {
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\toutbound, err := parseOutboundShareLink(line)
+          \t\t\tif err != nil {
+          \t\t\t\tparseErrorCategories[classifyShareParseError(err)] = struct{}{}
+          \t\t\t\tcontinue
+          \t\t\t}
+          \t\t\tconfig.OutboundConfigs = append(config.OutboundConfigs, *outbound)
+          \t\t}
+          \t\tif len(config.OutboundConfigs) == 0 && len(parseErrorCategories) > 0 {
+          \t\t\tif len(parseErrorCategories) == 1 {
+          \t\t\t\tfor category := range parseErrorCategories {
+          \t\t\t\t\treturn nil, fmt.Errorf("no valid share links: %s", category)
+          \t\t\t\t}
+          \t\t\t}
+          \t\t\treturn nil, fmt.Errorf("no valid share links: invalid share-link parameters")
+          \t\t}
+          \t\treturn config, nil
+          \t}
+          """
+          if old not in source:
+              raise SystemExit("Expected share-link parser block not found; refusing to patch unexpected source")
+          source = source.replace(old, new, 1)
+          marker = "func parseOutboundShareLink(text string) (*conf.OutboundDetourConfig, error) {"
+          classifier = """// classifyShareParseError emits only safe categories; parser errors may contain credentials.
+          func classifyShareParseError(err error) string {
+          \tmessage := strings.ToLower(err.Error())
+          \tswitch {
+          \tcase strings.Contains(message, "uuid"), strings.Contains(message, "user id"), strings.Contains(message, "vless id"):
+          \t\treturn "invalid VLESS identifier"
+          \tcase strings.Contains(message, "port"), strings.Contains(message, "address"), strings.Contains(message, "domain"), strings.Contains(message, "missing host"):
+          \t\treturn "invalid server address or port"
+          \tcase strings.Contains(message, "transport"), strings.Contains(message, "network"), strings.Contains(message, "xhttp"), strings.Contains(message, "splithttp"):
+          \t\treturn "unsupported or invalid transport settings"
+          \tcase strings.Contains(message, "tls"), strings.Contains(message, "reality"), strings.Contains(message, "security"):
+          \t\treturn "invalid TLS/Reality settings"
+          \tdefault:
+          \t\treturn "invalid share-link parameters"
+          \t}
+          }
+
+          """
+          if marker not in source:
+              raise SystemExit("Expected share-link parser function not found")
+          source = source.replace(marker, classifier + marker, 1)
+          path.write_text(source)
+          print("Applied safe share-link parse diagnostics")
+          PY
+          gofmt -w share/validate_outbound.go share/parse_share.go
           grep -q "classifyOutboundBuildError" share/validate_outbound.go
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           export LIBXRAY_ANDROID_API=26
