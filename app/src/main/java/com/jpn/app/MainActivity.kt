@@ -120,6 +120,8 @@ class MainActivity : Activity() {
             textSize = 16f
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(16))
+            // Allow long-press selection and copying of subscription diagnostics.
+            setTextIsSelectable(true)
         }
 
         val subscriptionTitle = sectionTitle("Подписка")
