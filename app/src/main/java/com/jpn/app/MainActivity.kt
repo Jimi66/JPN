@@ -228,7 +228,7 @@ class MainActivity : Activity() {
                     val acceptedForUse = nodes.count { !it.optBoolean("jpnNeedsValidation", false) }
                     val rejected = (sourceCount - acceptedForUse).coerceAtLeast(0)
                     val rejectedDetails = if (rejectedIndexes.isNotEmpty()) {
-                        "; отклонены: ${rejectedIndexes.joinToString("; ")}"
+                        "; требуют проверки: ${rejectedIndexes.joinToString("; ")}"
                     } else {
                         ""
                     }
