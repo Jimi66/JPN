@@ -29,8 +29,7 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 /**
- * JPN 0.4 MVP: HTTP(S) subscription import plus direct share-link import.
- * Parsed nodes are handed to Xray only after the user selects one.
+ * JPN MVP: HTTP(S) subscription import and Xray server selection.
  */
 class MainActivity : Activity() {
 
@@ -148,6 +147,7 @@ class MainActivity : Activity() {
             text = "Вставить ссылку из буфера"
             setOnClickListener { pasteFromClipboard() }
         }
+        val disconnectButton = Button(this).apply {
             text = "Отключить VPN"
             setOnClickListener {
                 pendingSelectedOutbound = null
@@ -166,6 +166,7 @@ class MainActivity : Activity() {
         content.addView(loadSubscriptionButton, matchWidth())
         content.addView(nodesHeader, matchWidth())
         content.addView(nodesContainer, matchWidth())
+        content.addView(disconnectButton, matchWidth())
 
 
         val scroll = ScrollView(this).apply {
