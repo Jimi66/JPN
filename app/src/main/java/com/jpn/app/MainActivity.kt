@@ -186,7 +186,12 @@ class MainActivity : Activity() {
                 preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
                 renderNodes()
                 val name = node.optString("tag").ifBlank { "Сервер ${position + 1}" }
-                connectToOutbound(node, name)
+                if (isVpnRunning()) {
+                    connectToOutbound(node, name)
+                } else {
+                    hideKeyboard()
+                    setStatus("Выбран сервер: $name. VPN выключен — для подключения нажми «Вкл/Выкл».")
+                }
             }
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
@@ -215,8 +220,19 @@ class MainActivity : Activity() {
             setOnClickListener {
                 pendingSelectedOutbound = null
                 pendingSelectedName = null
-                XrayVpnService.stop(this@MainActivity)
-                setStatus("Отключение VPN…")
+                if (isVpnRunning()) {
+                    XrayVpnService.stop(this@MainActivity)
+                    setStatus("Отключение VPN…")
+                } else {
+                    val selected = nodes.getOrNull(selectedNodeIndex)
+                    if (selected == null) {
+                        setStatus("Сначала выбери сервер")
+                    } else {
+                        val name = selected.optString("tag")
+                            .ifBlank { "Сервер ${selectedNodeIndex + 1}" }
+                        connectToOutbound(selected, name)
+                    }
+                }
             }
         }
 
