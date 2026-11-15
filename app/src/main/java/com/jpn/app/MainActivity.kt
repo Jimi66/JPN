@@ -218,9 +218,15 @@ class MainActivity : Activity() {
                     nodes.addAll(imported)
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
+                    val rejectedIndexes = findRejectedCandidateIndexes(subscriptionText)
                     val rejected = (sourceCount - nodes.size).coerceAtLeast(0)
+                    val rejectedDetails = if (rejectedIndexes.isNotEmpty()) {
+                        "; не прошли проверку записи №${rejectedIndexes.joinToString(", ")}"
+                    } else {
+                        ""
+                    }
                     val diagnostic = if (sourceCount > 0) {
-                        "Подписка: найдено записей $sourceCount, принято Xray ${nodes.size}, отклонено $rejected"
+                        "Подписка: найдено $sourceCount, принято ${nodes.size}, отклонено $rejected$rejectedDetails"
                     } else {
                         "Подписка загружена: серверов ${nodes.size} (формат источника не позволяет посчитать записи)"
                     }
@@ -342,6 +348,63 @@ class MainActivity : Activity() {
             }
         }
         return 0
+    }
+
+    /**
+     * Re-validates each subscription entry independently to identify which
+     * entry numbers are rejected by libXray. No link contents or credentials
+     * are logged or shown to the user.
+     */
+    private fun findRejectedCandidateIndexes(text: String): List<Int> {
+        val source = text.removePrefix("\uFEFF").trim()
+        val candidates = mutableListOf<String>()
+
+        if (source.startsWith("{")) {
+            val outbounds = runCatching {
+                JSONObject(source).optJSONArray("outbounds")
+            }.getOrNull()
+            if (outbounds != null) {
+                for (i in 0 until outbounds.length()) {
+                    val config = JSONObject().put("outbounds", JSONArray().put(outbounds.get(i)))
+                    candidates.add(config.toString())
+                }
+            }
+        } else {
+            val lines = source.lineSequence().map { it.trim() }
+                .filter { line ->
+                    val scheme = line.substringBefore("://", "")
+                    line.contains("://") &&
+                        scheme.matches(Regex("(?i)vless|vmess|trojan|ss|socks|hysteria2|hy2"))
+                }
+            candidates.addAll(lines)
+        }
+
+        if (candidates.isEmpty()) {
+            val compact = source.filterNot { it.isWhitespace() }
+            val decoded = runCatching {
+                String(Base64.decode(compact, Base64.DEFAULT), StandardCharsets.UTF_8).trim()
+            }.getOrNull()
+            if (!decoded.isNullOrBlank() && decoded != source) {
+                return findRejectedCandidateIndexes(decoded)
+            }
+            return emptyList()
+        }
+
+        return candidates.mapIndexedNotNull { index, candidate ->
+            val result = runCatching {
+                val response = JSONObject(
+                    LibXray.invoke(
+                        JSONObject()
+                            .put("apiVersion", 3)
+                            .put("method", "convertShareLinksToXrayJson")
+                            .put("payload", JSONObject().put("text", candidate))
+                            .toString()
+                    )
+                )
+                response.optBoolean("success", false)
+            }.getOrDefault(false)
+            if (result) null else index + 1
+        }
     }
 
     private fun parseShareLinks(text: String): JSONArray {
