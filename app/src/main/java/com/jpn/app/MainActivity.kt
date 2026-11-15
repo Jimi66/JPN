@@ -432,7 +432,9 @@ class MainActivity : Activity() {
                 val rawError = validation?.optString("error").orEmpty().lowercase()
                 val safeReason = when {
                     "invalid vless identifier" in rawError -> "неверный идентификатор VLESS"
-                    "unsupported vless encryption" in rawError -> "неподдерживаемые параметры шифрования VLESS"
+                    "unsupported vless encryption value" in rawError -> "Xray не поддерживает указанное значение encryption VLESS"
+                    "missing required vless encryption=none setting" in rawError -> "в конфигурации VLESS отсутствует обязательное encryption=none"
+                    "vless encryption field used in an invalid configuration section" in rawError -> "параметр encryption VLESS находится не в том разделе конфигурации"
                     "unsupported vless flow" in rawError -> "неподдерживаемый режим VLESS"
                     "invalid server address or port" in rawError -> "неверный адрес сервера или порт"
                     "unsupported or invalid transport settings" in rawError -> "неподдерживаемые или некорректные параметры транспорта"
@@ -616,7 +618,9 @@ class MainActivity : Activity() {
         return when {
             "invalid server address or port" in error -> "неверный адрес сервера или порт"
             "invalid vless identifier" in error -> "неверный идентификатор VLESS"
-            "unsupported vless encryption" in error -> "неподдерживаемые параметры шифрования VLESS"
+            "unsupported vless encryption value" in error -> "Xray не поддерживает указанное значение encryption VLESS"
+            "missing required vless encryption=none setting" in error -> "в конфигурации VLESS отсутствует обязательное encryption=none"
+            "vless encryption field used in an invalid configuration section" in error -> "параметр encryption VLESS находится не в том разделе конфигурации"
             "unsupported vless flow" in error -> "неподдерживаемый режим VLESS"
             "unsupported or invalid transport" in error -> "неподдерживаемые параметры транспорта"
             "invalid tls" in error || "reality" in error -> "некорректные параметры TLS/Reality"
