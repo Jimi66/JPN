@@ -198,6 +198,7 @@ class MainActivity : Activity() {
             try {
                 val body = downloadSubscription(subscriptionUrl)
                 val subscriptionText = decodeSubscriptionBody(body)
+                val sourceCount = countSubscriptionCandidates(subscriptionText)
                 val parsedNodes = parseShareLinks(subscriptionText)
                 if (parsedNodes.length() == 0) {
                     throw IllegalArgumentException("В подписке не найдено поддерживаемых серверов")
@@ -217,7 +218,13 @@ class MainActivity : Activity() {
                     nodes.addAll(imported)
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
-                    setStatus("Подписка загружена: серверов ${nodes.size}")
+                    val rejected = (sourceCount - nodes.size).coerceAtLeast(0)
+                    val diagnostic = if (sourceCount > 0) {
+                        "Подписка: найдено записей $sourceCount, принято Xray ${nodes.size}, отклонено $rejected"
+                    } else {
+                        "Подписка загружена: серверов ${nodes.size} (формат источника не позволяет посчитать записи)"
+                    }
+                    setStatus(diagnostic)
                 }
             } catch (error: Exception) {
                 mainHandler.post {
@@ -295,6 +302,46 @@ class MainActivity : Activity() {
             lower.contains("\nvmess://") ||
             lower.contains("\ntrojan://") ||
             lower.contains("\nss://")
+    }
+
+    /**
+     * Counts share-link entries in decoded subscription text without logging or
+     * displaying any server addresses, IDs, passwords, or other credentials.
+     * For Xray JSON subscriptions, counts the outbounds array.
+     */
+    private fun countSubscriptionCandidates(text: String): Int {
+        val source = text.removePrefix("\uFEFF").trim()
+        if (source.startsWith("{")) {
+            val jsonCount = runCatching {
+                JSONObject(source).optJSONArray("outbounds")?.length()
+            }.getOrNull()
+            if (jsonCount != null) return jsonCount
+        }
+
+        val schemePattern = Regex(
+            "(?i)(?:^|[\\r\\n])\\s*(?:vless|vmess|trojan|ss|socks|hysteria2|hy2)://"
+        )
+        val directCount = schemePattern.findAll(source).count()
+        if (directCount > 0) return directCount
+
+        // A subscription may be Base64 wrapped. Decode only for counting;
+        // libXray remains responsible for the actual parsing and validation.
+        val compact = source.filterNot { it.isWhitespace() }
+        val flags = intArrayOf(Base64.DEFAULT, Base64.URL_SAFE or Base64.NO_WRAP)
+        for (flag in flags) {
+            val decoded = runCatching {
+                String(Base64.decode(compact, flag), StandardCharsets.UTF_8).trim()
+            }.getOrNull() ?: continue
+            val decodedCount = schemePattern.findAll(decoded).count()
+            if (decodedCount > 0) return decodedCount
+            if (decoded.startsWith("{")) {
+                val jsonCount = runCatching {
+                    JSONObject(decoded).optJSONArray("outbounds")?.length()
+                }.getOrNull()
+                if (jsonCount != null) return jsonCount
+            }
+        }
+        return 0
     }
 
     private fun parseShareLinks(text: String): JSONArray {
