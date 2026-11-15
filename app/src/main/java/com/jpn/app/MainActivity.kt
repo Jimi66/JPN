@@ -341,6 +341,17 @@ class MainActivity : Activity() {
                 }.show()
             }
         }
+        val settingsButton = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_manage)
+            contentDescription = "Настройки"
+            val selectableBackground = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
+            background = getDrawable(selectableBackground.resourceId)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+            }
+        }
         screen.addView(root, android.widget.FrameLayout.LayoutParams(
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT
@@ -351,6 +362,11 @@ class MainActivity : Activity() {
             bottomMargin = dp(16)
         }
         screen.addView(addSubscriptionButton, addButtonParams)
+        screen.addView(settingsButton, android.widget.FrameLayout.LayoutParams(dp(48), dp(48)).apply {
+            gravity = Gravity.TOP or Gravity.START
+            topMargin = dp(8)
+            marginStart = dp(12)
+        })
         screen.setOnApplyWindowInsetsListener { _, insets ->
             addButtonParams.bottomMargin = dp(16) + insets.systemWindowInsetBottom
             addSubscriptionButton.layoutParams = addButtonParams
