@@ -95,6 +95,7 @@ class MainActivity : Activity() {
     private lateinit var nodesContainer: ListView
     private lateinit var nodesHeader: TextView
     private lateinit var vpnButton: ImageButton
+    private lateinit var addSubscriptionButton: Button
     private var pendingXrayConfig: String? = null
     private var pendingSelectedOutbound: JSONObject? = null
     private var pendingSelectedName: String? = null
@@ -305,7 +306,7 @@ class MainActivity : Activity() {
         serverCard.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         root.addView(serverCard, matchWidth())
 
-        val addButton = Button(this).apply {
+        addSubscriptionButton = Button(this).apply {
             text = "+"
             textSize = 30f
             minWidth = 0
@@ -345,10 +346,10 @@ class MainActivity : Activity() {
             marginEnd = dp(20)
             bottomMargin = dp(16)
         }
-        screen.addView(addButton, addButtonParams)
+        screen.addView(addSubscriptionButton, addButtonParams)
         screen.setOnApplyWindowInsetsListener { _, insets ->
             addButtonParams.bottomMargin = dp(16) + insets.systemWindowInsetBottom
-            addButton.layoutParams = addButtonParams
+            addSubscriptionButton.layoutParams = addButtonParams
             insets
         }
         setContentView(screen)
@@ -881,6 +882,9 @@ class MainActivity : Activity() {
             }
         }
         nodesContainer.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        if (::addSubscriptionButton.isInitialized) {
+            addSubscriptionButton.visibility = if (nodes.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+        }
         (nodesContainer.parent as? android.view.View)?.visibility =
             if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
