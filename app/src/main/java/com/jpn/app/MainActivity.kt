@@ -142,6 +142,10 @@ class MainActivity : Activity() {
             text = "Загрузить / обновить подписку"
             setOnClickListener { loadSubscription() }
         }
+        val deleteSubscriptionButton = Button(this).apply {
+            text = "Удалить подписку"
+            setOnClickListener { confirmDeleteSubscription() }
+        }
         nodesHeader = TextView(this).apply {
             text = "Серверы пока не загружены"
             textSize = 15f
@@ -196,6 +200,7 @@ class MainActivity : Activity() {
         content.addView(pasteButton, matchWidth())
         content.addView(scanQrButton, matchWidth())
         content.addView(loadSubscriptionButton, matchWidth())
+        content.addView(deleteSubscriptionButton, matchWidth())
         content.addView(nodesHeader, matchWidth())
         content.addView(nodesContainer, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -624,6 +629,25 @@ class MainActivity : Activity() {
         val security = streamSettings.optString("security")
         return security.equals("tls", ignoreCase = true) ||
             security.equals("reality", ignoreCase = true)
+    }
+
+    private fun confirmDeleteSubscription() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Удалить подписку?")
+            .setMessage("Будут удалены адрес подписки и все сохранённые серверы. Активное VPN-подключение при этом не отключится.")
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Удалить") { _, _ ->
+                preferences.edit()
+                    .remove(KEY_SUBSCRIPTION_URL)
+                    .remove(KEY_SUBSCRIPTION_CONTENT)
+                    .remove(KEY_SAVED_NODES)
+                    .apply()
+                subscriptionInput.setText("")
+                nodes.clear()
+                renderNodes()
+                setStatus("Подписка и сохранённые серверы удалены")
+            }
+            .show()
     }
 
     private fun restoreSavedSubscription() {
