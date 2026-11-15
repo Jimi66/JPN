@@ -633,6 +633,18 @@ class MainActivity : Activity() {
      * subscription refreshes. It contains no credentials.
      */
     private fun nodeIdentity(node: JSONObject): String {
+        val rawLink = node.optString("jpnRawShareLink")
+        if (rawLink.isNotBlank()) {
+            val uri = runCatching { android.net.Uri.parse(rawLink) }.getOrNull()
+            val protocol = uri?.scheme.orEmpty()
+            val address = uri?.host.orEmpty()
+            val port = uri?.port ?: -1
+            val network = uri?.getQueryParameter("type").orEmpty().ifBlank { "tcp" }
+            if (protocol.isNotBlank() && address.isNotBlank() && port > 0) {
+                return "$protocol|$address|$port|$network"
+            }
+            return ""
+        }
         val protocol = node.optString("protocol")
         val settings = node.optJSONObject("settings") ?: JSONObject()
         val vnext = settings.optJSONArray("vnext")?.optJSONObject(0)
@@ -648,8 +660,19 @@ class MainActivity : Activity() {
         return "$protocol|$address|$port|$network"
     }
 
+    private fun isSecurityEditable(node: JSONObject): Boolean {
+        val rawLink = node.optString("jpnRawShareLink")
+        val protocol = if (rawLink.isNotBlank()) {
+            runCatching { android.net.Uri.parse(rawLink).scheme }.getOrNull()
+        } else node.optString("protocol")
+        return protocol.equals("vless", ignoreCase = true)
+    }
+
     private fun applySecurityOverride(node: JSONObject, security: String) {
         if (security != "tls" && security != "none") return
+        node.put("jpnSecurityOverride", security)
+        // A raw share link is parsed on demand; apply the saved override after parsing.
+        if (node.optString("jpnRawShareLink").isNotBlank()) return
         val stream = node.optJSONObject("streamSettings") ?: JSONObject().also {
             node.put("streamSettings", it)
         }
@@ -657,7 +680,6 @@ class MainActivity : Activity() {
         if (security == "tls" && !stream.has("tlsSettings")) {
             stream.put("tlsSettings", JSONObject())
         }
-        node.put("jpnSecurityOverride", security)
     }
 
     private fun showSecuritySettings(node: JSONObject, name: String) {
@@ -725,7 +747,7 @@ class MainActivity : Activity() {
                 setOnClickListener { connectToOutbound(node, name) }
             }
             nodesContainer.addView(button, matchWidth())
-            if (!needsValidation && nodeIdentity(node).isNotBlank()) {
+            if (isSecurityEditable(node) && nodeIdentity(node).isNotBlank()) {
                 val stream = node.optJSONObject("streamSettings") ?: JSONObject()
                 val security = stream.optString("security").ifBlank { "none" }
                 val settingsButton = Button(this).apply {
@@ -748,6 +770,10 @@ class MainActivity : Activity() {
                     val parsed = parseShareLinks(rawShareLink)
                     if (parsed.length() == 0) throw IllegalArgumentException("Xray не вернул конфигурацию сервера")
                     val resolved = JSONObject(parsed.getJSONObject(0).toString())
+                    val securityOverride = outbound.optString("jpnSecurityOverride")
+                    if (securityOverride == "tls" || securityOverride == "none") {
+                        applySecurityOverride(resolved, securityOverride)
+                    }
                     mainHandler.post { connectToOutbound(resolved, name) }
                 } catch (error: Exception) {
                     mainHandler.post {
