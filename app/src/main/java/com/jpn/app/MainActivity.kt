@@ -548,7 +548,7 @@ class MainActivity : Activity() {
      * as a private raw link and can be retried when the user taps it.
      */
     private fun parseSubscriptionEntries(text: String): MutableList<JSONObject> {
-        val source = text.removePrefix("\\uFEFF").trim()
+        val source = text.removePrefix("\uFEFF").trim()
         val imported = mutableListOf<JSONObject>()
 
         if (source.startsWith("{")) {
