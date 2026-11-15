@@ -524,10 +524,10 @@ class MainActivity : Activity() {
             }
 
             fun yesNo(value: Boolean) = if (value) "есть" else "нет"
-            "№\${index + 1} security=$security, transport=$network, flow=\${yesNo(flowPresent)}, " +
-                "SNI=\${yesNo(sniPresent)}, pbk=\${yesNo(publicKeyPresent)}, sid=\${yesNo(shortIdPresent)}, " +
-                "fp=\${yesNo(fingerprintPresent)}, path=\${yesNo(pathPresent)}, host=\${yesNo(hostPresent)}, " +
-                "serviceName=\${yesNo(serviceNamePresent)}"
+            "№${index + 1} security=$security, transport=$network, flow=${yesNo(flowPresent)}, " +
+                "SNI=${yesNo(sniPresent)}, pbk=${yesNo(publicKeyPresent)}, sid=${yesNo(shortIdPresent)}, " +
+                "fp=${yesNo(fingerprintPresent)}, path=${yesNo(pathPresent)}, host=${yesNo(hostPresent)}, " +
+                "serviceName=${yesNo(serviceNamePresent)}"
         }
     }
 
