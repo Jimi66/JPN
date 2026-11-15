@@ -126,7 +126,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("share/parse_share.go")
+          path = Path("share/convert_share.go")
           source = path.read_text()
           old = """\tif hasShareSchemeLine(text) {
           \t\tfor raw := range strings.SplitSeq(text, "\\n") {
@@ -174,7 +174,7 @@ jobs:
           if old not in source:
               raise SystemExit("Expected share-link parser block not found; refusing to patch unexpected source")
           source = source.replace(old, new, 1)
-          marker = "func parseOutboundShareLink(text string) (*conf.OutboundDetourConfig, error) {"
+          marker = "func parseShareCandidates(links string, allowBase64 bool) (*conf.Config, error) {"
           classifier = """// classifyShareParseError emits only safe categories; parser errors may contain credentials.
           func classifyShareParseError(err error) string {
           \tmessage := strings.ToLower(err.Error())
@@ -196,8 +196,10 @@ jobs:
           if marker not in source:
               raise SystemExit("Expected share-link parser function not found")
           source = source.replace(marker, classifier + marker, 1)
+if '"fmt"' not in source:
+    source = source.replace('"errors"\n', '"errors"\n\t"fmt"\n', 1)
           path.write_text(source)
-          print("Applied safe share-link parse diagnostics")
+          print("Applied safe share-link parse diagnostics to convert_share.go")
           PY
           gofmt -w share/validate_outbound.go share/parse_share.go
           grep -q "classifyOutboundBuildError" share/validate_outbound.go
