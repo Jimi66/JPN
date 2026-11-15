@@ -669,7 +669,9 @@ class MainActivity : Activity() {
     }
 
     private fun renderNodes() {
-        nodesContainer.removeAllViews()
+        // ListView is an AdapterView: its rows are owned by the adapter.
+        // Calling removeAllViews() here throws UnsupportedOperationException
+        // and crashes the activity after subscription/QR import.
         nodesHeader.text = if (nodes.isEmpty()) {
             "Серверы не найдены"
         } else {
@@ -811,22 +813,32 @@ class MainActivity : Activity() {
             return
         }
 
-        val decoded = runCatching { decodeSubscriptionBody(value) }.getOrDefault(value)
-        val imported = runCatching { parseSubscriptionEntries(decoded) }.getOrElse {
-            setStatus("QR распознан, но ссылка не поддерживается")
-            return
-        }
-        if (imported.isEmpty()) {
-            setStatus("В QR-коде не найдено серверов с защитой TLS или REALITY")
-            return
-        }
+        setStatus("Обрабатываю QR-код…")
+        Thread {
+            val imported = runCatching {
+                val decoded = decodeSubscriptionBody(value)
+                parseSubscriptionEntries(decoded)
+            }.getOrElse {
+                mainHandler.post {
+                    setStatus("QR распознан, но ссылка не поддерживается")
+                }
+                return@Thread
+            }
 
-        nodes.addAll(imported)
-        preferences.edit()
-            .putString(KEY_SAVED_NODES, JSONArray(nodes).toString())
-            .apply()
-        renderNodes()
-        setStatus("Из QR-кода добавлено серверов: ${imported.size}. Всего в списке: ${nodes.size}")
+            mainHandler.post {
+                if (imported.isEmpty()) {
+                    setStatus("В QR-коде не найдено серверов с защитой TLS или REALITY")
+                    return@post
+                }
+
+                nodes.addAll(imported)
+                preferences.edit()
+                    .putString(KEY_SAVED_NODES, JSONArray(nodes).toString())
+                    .apply()
+                renderNodes()
+                setStatus("Из QR-кода добавлено серверов: ${imported.size}. Всего в списке: ${nodes.size}")
+            }
+        }.start()
     }
 
     private fun pasteFromClipboard() {
