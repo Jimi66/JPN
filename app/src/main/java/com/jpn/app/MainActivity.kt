@@ -6,6 +6,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -29,6 +32,8 @@ import com.jpn.app.vpn.XrayVpnService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
@@ -220,13 +225,37 @@ class MainActivity : Activity() {
                 }
             }
         }
+        val pingButton = Button(this).apply {
+            text = "PING"
+            textSize = 12f
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(dp(4), 0, dp(4), 0)
+            contentDescription = "Проверить пинг выбранного сервера"
+            setTextColor(0xFF706AA5.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(0xFFE1E3F7.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0xFFCBCBE8.toInt())
+            }
+            elevation = dp(5).toFloat()
+            setOnClickListener { checkSelectedServerPing() }
+        }
+        val vpnButtonsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(pingButton, LinearLayout.LayoutParams(dp(62), dp(62)).apply {
+                marginEnd = dp(16)
+            })
+            addView(vpnButton, LinearLayout.LayoutParams(dp(156), dp(156)))
+        }
         val vpnArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            addView(vpnButton, LinearLayout.LayoutParams(dp(156), dp(156)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = dp(8)
-            })
+            addView(vpnButtonsRow, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(8) })
             addView(statusView, matchWidth())
         }
         root.addView(vpnArea, LinearLayout.LayoutParams(
@@ -891,6 +920,75 @@ class MainActivity : Activity() {
         }
         (nodesContainer.parent as? android.view.View)?.visibility =
             if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+    }
+
+    private fun checkSelectedServerPing() {
+        if (nodes.isEmpty()) {
+            setStatus("Сначала добавь сервер")
+            return
+        }
+        if (selectedNodeIndex !in nodes.indices) {
+            selectedNodeIndex = 0
+            preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
+            renderNodes()
+        }
+        val selected = nodes.getOrNull(selectedNodeIndex) ?: return
+        val name = selected.optString("tag").ifBlank { "Сервер ${selectedNodeIndex + 1}" }
+        setStatus("Проверяю пинг: $name…")
+
+        Thread {
+            try {
+                var outbound = selected
+                val rawShareLink = outbound.optString("jpnRawShareLink")
+                if (rawShareLink.isNotBlank()) {
+                    val parsed = parseShareLinks(rawShareLink)
+                    if (parsed.length() == 0) {
+                        throw IllegalArgumentException("Не удалось разобрать сервер")
+                    }
+                    outbound = parsed.getJSONObject(0)
+                }
+
+                val settings = outbound.optJSONObject("settings")
+                    ?: throw IllegalArgumentException("В конфигурации не найден адрес сервера")
+                val endpoint = settings.optJSONArray("vnext")?.optJSONObject(0)
+                    ?: settings.optJSONArray("servers")?.optJSONObject(0)
+                    ?: throw IllegalArgumentException("Не удалось определить адрес сервера")
+                val host = endpoint.optString("address").trim()
+                val port = endpoint.optInt("port", 0)
+                if (host.isBlank() || port !in 1..65535) {
+                    throw IllegalArgumentException("Некорректный адрес или порт сервера")
+                }
+
+                val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                val networks = connectivity.allNetworks.toList()
+                val directNetwork = connectivity.activeNetwork
+                    ?.takeIf { network ->
+                        connectivity.getNetworkCapabilities(network)?.let {
+                            it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                                !it.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                        } == true
+                    }
+                    ?: networks.firstOrNull { network ->
+                        connectivity.getNetworkCapabilities(network)?.let {
+                            it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                                !it.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                        } == true
+                    }
+                    ?: throw IllegalStateException("Не найдено прямое подключение к интернету")
+
+                val address = directNetwork.getAllByName(host).firstOrNull()
+                    ?: throw IllegalStateException("Не удалось определить адрес сервера")
+                val startedAt = android.os.SystemClock.elapsedRealtime()
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress(address, port), 5000)
+                }
+                val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
+                mainHandler.post { setStatus("Пинг $name: $elapsed мс") }
+            } catch (error: Exception) {
+                val reason = error.message ?: "сервер недоступен"
+                mainHandler.post { setStatus("Проверка пинга не удалась: $reason") }
+            }
+        }.start()
     }
 
     private fun connectToOutbound(outbound: JSONObject, name: String) {
