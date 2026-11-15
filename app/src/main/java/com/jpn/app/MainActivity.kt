@@ -44,6 +44,7 @@ class MainActivity : Activity() {
         private const val KEY_SUBSCRIPTION_CONTENT = "subscription_content"
         private const val KEY_SAVED_NODES = "saved_nodes_json"
         private const val KEY_VPN_STATE = "vpn_state"
+        private const val KEY_SELECTED_NODE_INDEX = "selected_node_index"
         private const val VPN_REQUEST_CODE = 4102
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
     }
@@ -63,6 +64,7 @@ class MainActivity : Activity() {
     private var pendingSelectedOutbound: JSONObject? = null
     private var pendingSelectedName: String? = null
     private val nodes = mutableListOf<JSONObject>()
+    private var selectedNodeIndex = -1
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -180,6 +182,9 @@ class MainActivity : Activity() {
             choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
             setOnItemClickListener { _, _, position, _ ->
                 val node = nodes.getOrNull(position) ?: return@setOnItemClickListener
+                selectedNodeIndex = position
+                preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
+                renderNodes()
                 val name = node.optString("tag").ifBlank { "Сервер ${position + 1}" }
                 connectToOutbound(node, name)
             }
@@ -739,15 +744,26 @@ class MainActivity : Activity() {
             "Доступные серверы: ${nodes.size}. Нажми на сервер для подключения:"
         }
 
+        selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
         val labels = nodes.mapIndexed { index, node ->
             val name = node.optString("tag").ifBlank { "Сервер ${index + 1}" }
             if (node.optBoolean("jpnNeedsValidation", false)) "$name · не проверен" else name
         }
-        nodesContainer.adapter = ArrayAdapter(
+        nodesContainer.adapter = object : ArrayAdapter<String>(
             this,
             android.R.layout.simple_list_item_1,
             labels
-        )
+        ) {
+            override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val row = super.getView(position, convertView, parent) as TextView
+                row.paintFlags = if (position == selectedNodeIndex) {
+                    row.paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+                } else {
+                    row.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
+                }
+                return row
+            }
+        }
         nodesContainer.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
