@@ -247,6 +247,10 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(8), dp(8), dp(8))
             setOnClickListener { anchor ->
                 android.widget.PopupMenu(this@MainActivity, anchor).apply {
+                    menu.add("Маршрутизация приложений").setOnMenuItemClickListener {
+                        startActivity(Intent(this@MainActivity, AppRoutingActivity::class.java))
+                        true
+                    }
                     menu.add("Удалить подписку").setOnMenuItemClickListener {
                         confirmDeleteSubscription()
                         true
