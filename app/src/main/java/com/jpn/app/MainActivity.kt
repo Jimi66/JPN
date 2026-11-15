@@ -265,7 +265,6 @@ class MainActivity : Activity() {
         root.addView(serverCard, matchWidth())
 
         val addButton = Button(this).apply {
-        val addButton = Button(this).apply {
             text = "+"
             textSize = 30f
             minWidth = 0
