@@ -196,12 +196,12 @@ jobs:
           if marker not in source:
               raise SystemExit("Expected share-link parser function not found")
           source = source.replace(marker, classifier + marker, 1)
-if '"fmt"' not in source:
-    source = source.replace('"errors"\n', '"errors"\n\t"fmt"\n', 1)
+          if '"fmt"' not in source:
+              source = source.replace('"errors"\n', '"errors"\n\t"fmt"\n', 1)
           path.write_text(source)
           print("Applied safe share-link parse diagnostics to convert_share.go")
           PY
-          gofmt -w share/validate_outbound.go share/parse_share.go
+          gofmt -w share/validate_outbound.go share/convert_share.go
           grep -q "classifyOutboundBuildError" share/validate_outbound.go
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           export LIBXRAY_ANDROID_API=26
