@@ -298,15 +298,10 @@ class MainActivity : Activity() {
     }
 
     private fun parseShareLinks(text: String): JSONArray {
-        // Normalize CR-only separators and multiple links accidentally placed on one line.
-        val normalizedText = text.replace("\r", "\n").replace(
-            Regex("(?i)(?=(?:vless|vmess|trojan|ss|socks|hysteria2|hy2)://)"),
-            "\n"
-        ).trim()
         val request = JSONObject()
             .put("apiVersion", 3)
             .put("method", "convertShareLinksToXrayJson")
-            .put("payload", JSONObject().put("text", normalizedText))
+            .put("payload", JSONObject().put("text", text))
         val response = JSONObject(LibXray.invoke(request.toString()))
         if (!response.optBoolean("success", false)) {
             throw IllegalArgumentException(
