@@ -206,7 +206,7 @@ class MainActivity : Activity() {
             setOnClickListener { scanSubscriptionQr() }
         }
         val disconnectButton = Button(this).apply {
-            text = "Отключить VPN"
+            text = "Вкл/Выкл"
             setOnClickListener {
                 pendingSelectedOutbound = null
                 pendingSelectedName = null
