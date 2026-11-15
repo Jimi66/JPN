@@ -858,7 +858,7 @@ class MainActivity : Activity() {
         nodesHeader.text = if (nodes.isEmpty()) {
             "Серверы не найдены"
         } else {
-            "Доступные серверы: ${nodes.size}. Нажми на сервер для подключения:"
+            "Доступные серверы"
         }
 
         selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
