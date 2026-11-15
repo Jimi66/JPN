@@ -201,6 +201,33 @@ jobs:
           path.write_text(source)
           print("Applied safe share-link parse diagnostics to convert_share.go")
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("share/convert_share.go")
+          source = path.read_text()
+          old = """\tif encrypted {
+          \t\treturn nil, ErrAgePlaintextUnsupported
+          \t}
+          \t// Builder errors can contain credentials or whole source values.
+          \treturn nil, errors.New("no valid outbound found")
+          }
+
+          func parseShareCandidates"""
+          new = """\tif encrypted {
+          \t\treturn nil, ErrAgePlaintextUnsupported
+          \t}
+          \t// filterBuildableOutbounds returns only a safe, classified builder error.
+          \treturn nil, err
+          }
+
+          func parseShareCandidates"""
+          if old not in source:
+              raise SystemExit("Expected builder-error masking block not found")
+          source = source.replace(old, new, 1)
+          path.write_text(source)
+          print("Preserved safe classified Xray builder diagnostics")
+          PY
           gofmt -w share/validate_outbound.go share/convert_share.go
           grep -q "classifyOutboundBuildError" share/validate_outbound.go
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
