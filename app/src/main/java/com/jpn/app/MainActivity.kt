@@ -36,7 +36,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PREFS = "jpn_settings"
-        private const val KEY_LAST_VLESS = "last_vless_link"
+
         private const val KEY_SUBSCRIPTION_URL = "subscription_url"
         private const val KEY_VPN_STATE = "vpn_state"
         private const val VPN_REQUEST_CODE = 4102
@@ -48,12 +48,13 @@ class MainActivity : Activity() {
 
     private lateinit var statusView: TextView
     private lateinit var subscriptionInput: EditText
-    private lateinit var directLinkInput: EditText
-    private lateinit var connectButton: Button
+
     private lateinit var loadSubscriptionButton: Button
     private lateinit var nodesContainer: LinearLayout
     private lateinit var nodesHeader: TextView
     private var pendingXrayConfig: String? = null
+    private var pendingSelectedOutbound: JSONObject? = null
+    private var pendingSelectedName: String? = null
     private val nodes = mutableListOf<JSONObject>()
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
@@ -61,6 +62,13 @@ class MainActivity : Activity() {
             val state = intent?.getStringExtra("state") ?: return
             val message = intent.getStringExtra("message") ?: state
             showState(state, message)
+            if (state == "disconnected" && pendingSelectedOutbound != null) {
+                val outbound = pendingSelectedOutbound
+                val name = pendingSelectedName ?: "Выбранный сервер"
+                pendingSelectedOutbound = null
+                pendingSelectedName = null
+                if (outbound != null) mainHandler.postDelayed({ connectToOutbound(outbound, name) }, 300)
+            }
         }
     }
 
@@ -88,7 +96,6 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::connectButton.isInitialized) refreshVpnState()
     }
 
     private fun buildScreen() {
@@ -137,26 +144,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
         }
 
-        val directTitle = sectionTitle("Или подключиться напрямую")
-        directLinkInput = EditText(this).apply {
-            hint = "Вставь ссылку VLESS / VMess / Trojan / SS"
-            minLines = 2
-            maxLines = 3
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            setText(preferences.getString(KEY_LAST_VLESS, ""))
-        }
         val pasteButton = Button(this).apply {
             text = "Вставить ссылку из буфера"
             setOnClickListener { pasteFromClipboard() }
         }
-        connectButton = Button(this).apply {
-            text = "Подключиться по ссылке"
-            setOnClickListener { connectDirectLink() }
-        }
-        val disconnectButton = Button(this).apply {
             text = "Отключить VPN"
             setOnClickListener {
+                pendingSelectedOutbound = null
+                pendingSelectedName = null
                 XrayVpnService.stop(this@MainActivity)
                 setStatus("Отключение VPN…")
             }
@@ -167,14 +162,11 @@ class MainActivity : Activity() {
         content.addView(statusView, matchWidth())
         content.addView(subscriptionTitle, matchWidth())
         content.addView(subscriptionInput, matchWidth())
+        content.addView(pasteButton, matchWidth())
         content.addView(loadSubscriptionButton, matchWidth())
         content.addView(nodesHeader, matchWidth())
         content.addView(nodesContainer, matchWidth())
-        content.addView(directTitle, matchWidth())
-        content.addView(directLinkInput, matchWidth())
-        content.addView(pasteButton, matchWidth())
-        content.addView(connectButton, matchWidth())
-        content.addView(disconnectButton, matchWidth())
+
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -305,10 +297,15 @@ class MainActivity : Activity() {
     }
 
     private fun parseShareLinks(text: String): JSONArray {
+        // Normalize CR-only separators and multiple links accidentally placed on one line.
+        val normalizedText = text.replace("\r", "\n").replace(
+            Regex("(?i)(?=(?:vless|vmess|trojan|ss|socks|hysteria2|hy2)://)"),
+            "\n"
+        ).trim()
         val request = JSONObject()
             .put("apiVersion", 3)
             .put("method", "convertShareLinksToXrayJson")
-            .put("payload", JSONObject().put("text", text))
+            .put("payload", JSONObject().put("text", normalizedText))
         val response = JSONObject(LibXray.invoke(request.toString()))
         if (!response.optBoolean("success", false)) {
             throw IllegalArgumentException(
@@ -337,52 +334,22 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun connectDirectLink() {
-        val link = directLinkInput.text.toString().trim()
-        if (link.isBlank()) {
-            setStatus("Вставь ссылку подключения")
-            return
-        }
-        preferences.edit().putString(KEY_LAST_VLESS, link).apply()
-        hideKeyboard()
-        setStatus("Разбираю ссылку…")
-        connectButton.isEnabled = false
-
-        Thread {
-            try {
-                val parsed = parseShareLinks(link)
-                if (parsed.length() == 0) throw IllegalArgumentException("Сервер не найден")
-                val outbound = parsed.getJSONObject(0)
-                val name = outbound.optString("tag").ifBlank { "Выбранный сервер" }
-                mainHandler.post {
-                    connectButton.isEnabled = true
-                    connectToOutbound(outbound, name)
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    connectButton.isEnabled = true
-                    setStatus("Ошибка ссылки: ${error.message ?: "не удалось разобрать"}")
-                }
-            }
-        }.start()
-    }
-
     private fun connectToOutbound(outbound: JSONObject, name: String) {
         if (isVpnRunning()) {
+            pendingSelectedOutbound = JSONObject(outbound.toString())
+            pendingSelectedName = name
+            setStatus("Переключаюсь на сервер: $name…")
             XrayVpnService.stop(this)
-            setStatus("Отключение предыдущего соединения…")
             return
         }
 
         hideKeyboard()
         setStatus("Подключаюсь: $name…")
-        connectButton.isEnabled = false
 
         Thread {
             try {
                 val config = buildXrayConfig(outbound)
                 mainHandler.post {
-                    connectButton.isEnabled = true
                     pendingXrayConfig = config
                     val permissionIntent = VpnService.prepare(this)
                     if (permissionIntent != null) {
@@ -394,7 +361,6 @@ class MainActivity : Activity() {
                 }
             } catch (error: Exception) {
                 mainHandler.post {
-                    connectButton.isEnabled = true
                     setStatus("Ошибка конфигурации: ${error.message ?: "не удалось подготовить"}")
                 }
             }
@@ -432,7 +398,6 @@ class MainActivity : Activity() {
         if (resultCode == RESULT_OK && config != null) {
             startVpnService(config)
         } else {
-            connectButton.isEnabled = true
             setStatus("Разрешение Android VPN не предоставлено")
         }
     }
@@ -440,10 +405,8 @@ class MainActivity : Activity() {
     private fun startVpnService(config: String) {
         try {
             XrayVpnService.start(this, config)
-            connectButton.isEnabled = false
             setStatus("Запуск VPN…")
         } catch (error: Exception) {
-            connectButton.isEnabled = true
             setStatus("Не удалось запустить VPN: ${error.message ?: "ошибка"}")
         }
     }
@@ -458,9 +421,9 @@ class MainActivity : Activity() {
             setStatus("В буфере обмена нет текста")
             return
         }
-        directLinkInput.setText(value)
-        directLinkInput.setSelection(directLinkInput.text.length)
-        setStatus("Ссылка вставлена")
+        subscriptionInput.setText(value)
+        subscriptionInput.setSelection(subscriptionInput.text.length)
+        setStatus("Ссылка вставлена в поле «Подписка»")
     }
 
     private fun isVpnRunning(): Boolean {
@@ -478,8 +441,6 @@ class MainActivity : Activity() {
 
     private fun refreshVpnState() {
         val running = isVpnRunning()
-        connectButton.text = if (running) "Подключение активно" else "Подключиться по ссылке"
-        connectButton.isEnabled = !running
         if (running) {
             setStatus("VPN подключён")
         } else {
@@ -490,8 +451,6 @@ class MainActivity : Activity() {
     }
 
     private fun showState(state: String, message: String) {
-        connectButton.isEnabled = state != "connected"
-        connectButton.text = if (state == "connected") "Подключение активно" else "Подключиться по ссылке"
         setStatus(message)
     }
 
@@ -501,8 +460,8 @@ class MainActivity : Activity() {
 
     private fun hideKeyboard() {
         val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        manager.hideSoftInputFromWindow(directLinkInput.windowToken, HIDE_NOT_ALWAYS)
-        directLinkInput.clearFocus()
+        manager.hideSoftInputFromWindow(subscriptionInput.windowToken, HIDE_NOT_ALWAYS)
+        subscriptionInput.clearFocus()
     }
 
     private fun matchWidth() = LinearLayout.LayoutParams(
