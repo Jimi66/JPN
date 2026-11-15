@@ -206,25 +206,10 @@ jobs:
 
           path = Path("share/convert_share.go")
           source = path.read_text()
-          old = """\tif encrypted {
-          \t\treturn nil, ErrAgePlaintextUnsupported
-          \t}
-          \t// Builder errors can contain credentials or whole source values.
-          \treturn nil, errors.New("no valid outbound found")
-          }
-
-          func parseShareCandidates"""
-          new = """\tif encrypted {
-          \t\treturn nil, ErrAgePlaintextUnsupported
-          \t}
-          \t// filterBuildableOutbounds returns only a safe, classified builder error.
-          \treturn nil, err
-          }
-
-          func parseShareCandidates"""
+          old = '\treturn nil, errors.New("no valid outbound found")'
           if old not in source:
-              raise SystemExit("Expected builder-error masking block not found")
-          source = source.replace(old, new, 1)
+              raise SystemExit("Expected builder-error masking statement not found")
+          source = source.replace(old, '\treturn nil, err', 1)
           path.write_text(source)
           print("Preserved safe classified Xray builder diagnostics")
           PY
