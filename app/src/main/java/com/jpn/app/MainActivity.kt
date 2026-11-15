@@ -169,9 +169,14 @@ class MainActivity : Activity() {
                     XrayVpnService.stop(this@MainActivity)
                     setStatus("Отключение VPN…")
                 } else {
+                    if (selectedNodeIndex !in nodes.indices && nodes.isNotEmpty()) {
+                        selectedNodeIndex = 0
+                        preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
+                        renderNodes()
+                    }
                     val selected = nodes.getOrNull(selectedNodeIndex)
                     if (selected == null) {
-                        setStatus("Сначала выбери сервер")
+                        setStatus("Сначала добавь сервер")
                     } else {
                         val name = selected.optString("tag")
                             .ifBlank { "Сервер ${selectedNodeIndex + 1}" }
