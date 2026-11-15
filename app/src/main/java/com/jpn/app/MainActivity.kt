@@ -94,6 +94,7 @@ class MainActivity : Activity() {
     private lateinit var loadSubscriptionButton: Button
     private lateinit var nodesContainer: ListView
     private lateinit var nodesHeader: TextView
+    private lateinit var vpnButton: ImageButton
     private var pendingXrayConfig: String? = null
     private var pendingSelectedOutbound: JSONObject? = null
     private var pendingSelectedName: String? = null
@@ -181,7 +182,7 @@ class MainActivity : Activity() {
             setOnClickListener { loadSubscription() }
         }
 
-        val vpnButton = ImageButton(this).apply {
+        vpnButton = ImageButton(this).apply {
             contentDescription = "Включить или выключить VPN"
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             setPadding(dp(43), dp(43), dp(43), dp(43))
@@ -1070,6 +1071,7 @@ class MainActivity : Activity() {
 
     private fun refreshVpnState() {
         val running = isVpnRunning()
+        updateVpnButtonAppearance(running)
         if (running) {
             setStatus("VPN подключён")
         } else {
@@ -1080,7 +1082,16 @@ class MainActivity : Activity() {
     }
 
     private fun showState(state: String, message: String) {
+        updateVpnButtonAppearance(state == "connected" || state == "connecting")
         setStatus(message)
+    }
+
+    private fun updateVpnButtonAppearance(running: Boolean) {
+        if (!::vpnButton.isInitialized) return
+        val backgroundColor = if (running) 0xFF706AA5.toInt() else 0xFFE1E3F7.toInt()
+        val symbolColor = if (running) 0xFFE1E3F7.toInt() else 0xFF706AA5.toInt()
+        vpnButton.setImageDrawable(PowerSymbolDrawable(symbolColor))
+        (vpnButton.background as? android.graphics.drawable.GradientDrawable)?.setColor(backgroundColor)
     }
 
     private fun setStatus(message: String) {
