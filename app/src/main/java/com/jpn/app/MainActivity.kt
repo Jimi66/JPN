@@ -35,6 +35,42 @@ import java.nio.charset.StandardCharsets
 /**
  * JPN MVP: HTTP(S) subscription import and Xray server selection.
  */
+private class PowerSymbolDrawable(private val color: Int) : android.graphics.drawable.Drawable() {
+    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = android.graphics.Paint.Style.STROKE
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+
+    override fun draw(canvas: android.graphics.Canvas) {
+        val b = bounds
+        val size = minOf(b.width(), b.height()).toFloat()
+        val left = b.left + (b.width() - size) / 2f
+        val top = b.top + (b.height() - size) / 2f
+        val stroke = size * 0.115f
+        paint.strokeWidth = stroke
+        val inset = stroke * 1.05f
+        val arc = android.graphics.RectF(
+            left + inset,
+            top + size * 0.22f,
+            left + size - inset,
+            top + size - inset
+        )
+        canvas.drawArc(arc, 135f, 270f, false, paint)
+        canvas.drawLine(
+            left + size / 2f, top + size * 0.10f,
+            left + size / 2f, top + size * 0.48f,
+            paint
+        )
+    }
+
+    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+    override fun setColorFilter(filter: android.graphics.ColorFilter?) { paint.colorFilter = filter }
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
+}
+
 class MainActivity : Activity() {
 
     companion object {
@@ -145,17 +181,20 @@ class MainActivity : Activity() {
             setOnClickListener { loadSubscription() }
         }
 
-        val vpnButton = Button(this).apply {
-            text = "ВКЛ / ВЫКЛ"
-            textSize = 17f
-            isAllCaps = false
-            gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.WHITE)
+        val vpnButton = ImageButton(this).apply {
+            contentDescription = "Включить или выключить VPN"
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(43), dp(43), dp(43), dp(43))
+            setImageDrawable(PowerSymbolDrawable(0xFF706AA5.toInt()))
             background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(0xFF258A45.toInt())
-                setStroke(dp(3), 0xFF176B34.toInt())
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(0xFFE1E3F7.toInt())
+                cornerRadius = dp(34).toFloat()
             }
+            elevation = dp(12).toFloat()
+            val ripple = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, ripple, true)
+            foreground = getDrawable(ripple.resourceId)
             setOnClickListener {
                 pendingSelectedOutbound = null
                 pendingSelectedName = null
