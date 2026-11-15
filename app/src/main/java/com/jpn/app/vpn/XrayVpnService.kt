@@ -101,6 +101,30 @@ class XrayVpnService : VpnService() {
             .addAddress("fdfe:dcba:9876::1", 126)
             .addRoute("::", 0)
 
+        // Apply per-app routing before establishing the Android VPN interface.
+        val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        val routingMode = routingPreferences.getString("routing_mode", "exclude")
+        val selectedPackages = routingPreferences
+            .getStringSet("routing_packages", emptySet())
+            ?.toSet()
+            ?: emptySet()
+        if (routingMode == "selected") {
+            var atLeastOneAllowed = false
+            selectedPackages.forEach { appPackage ->
+                if (runCatching { builder.addAllowedApplication(appPackage) }.isSuccess) {
+                    atLeastOneAllowed = true
+                }
+            }
+            // An empty allow-list means Android routes every app through the VPN.
+            // Restrict it to JPN itself instead, so "only selected" + no selection
+            // does not unexpectedly turn into full-device routing.
+            if (!atLeastOneAllowed) builder.addAllowedApplication(packageName)
+        } else {
+            selectedPackages.forEach { appPackage ->
+                runCatching { builder.addDisallowedApplication(appPackage) }
+            }
+        }
+
         vpnInterface = builder.establish()
             ?: throw IllegalStateException("Android did not establish the VPN interface")
 
