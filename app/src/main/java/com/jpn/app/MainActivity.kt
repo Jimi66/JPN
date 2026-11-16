@@ -525,6 +525,7 @@ class MainActivity : Activity() {
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
                     refreshVpnState()
+                    checkServersLatency()
                 }
             } catch (error: Exception) {
                 mainHandler.post {
@@ -990,7 +991,7 @@ class MainActivity : Activity() {
      * Measures the selected Xray outbound directly through libXray.
      * This follows Happ's proxy-delay check and does not create an Android VPN/TUN interface.
      */
-    private fun checkServersLatency(button: ImageButton) {
+    private fun checkServersLatency(button: ImageButton? = null) {
         if (pingCheckRunning) return
         if (nodes.isEmpty()) {
             setStatus("Нет серверов для проверки")
@@ -998,8 +999,8 @@ class MainActivity : Activity() {
         }
 
         pingCheckRunning = true
-        button.isEnabled = false
-        button.alpha = 0.45f
+        button?.isEnabled = false
+        button?.alpha = 0.45f
         vpnButton.isEnabled = false
         nodesContainer.isEnabled = false
 
@@ -1078,8 +1079,8 @@ class MainActivity : Activity() {
             } finally {
                 mainHandler.post {
                     pingCheckRunning = false
-                    button.isEnabled = true
-                    button.alpha = 1f
+                    button?.isEnabled = true
+                    button?.alpha = 1f
                     vpnButton.isEnabled = true
                     nodesContainer.isEnabled = true
                     val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
@@ -1361,6 +1362,7 @@ class MainActivity : Activity() {
                     .apply()
                 renderNodes()
                 setStatus("Из QR-кода добавлено серверов: ${imported.size}. Всего в списке: ${nodes.size}")
+                checkServersLatency()
             }
         }.start()
     }
