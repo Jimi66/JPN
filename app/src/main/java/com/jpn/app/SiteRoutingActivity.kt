@@ -31,11 +31,21 @@ class SiteRoutingActivity : Activity() {
     private lateinit var proxyInput: EditText
     private lateinit var directInput: EditText
     private lateinit var blockInput: EditText
+    private var initialEnabled = false
+    private var initialStrategy = "IPIfNonMatch"
+    private var initialProxy = ""
+    private var initialDirect = ""
+    private var initialBlock = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         migrateLegacyRules()
         buildScreen()
+        initialEnabled = enabledSwitch.isChecked
+        initialStrategy = strategySpinner.selectedItem?.toString() ?: "IPIfNonMatch"
+        initialProxy = proxyInput.text.toString()
+        initialDirect = directInput.text.toString()
+        initialBlock = blockInput.text.toString()
     }
 
     private fun migrateLegacyRules() {
@@ -133,11 +143,21 @@ class SiteRoutingActivity : Activity() {
 
     override fun onPause() {
         if (::proxyInput.isInitialized) {
+            val changed = enabledSwitch.isChecked != initialEnabled ||
+                (strategySpinner.selectedItem?.toString() ?: "IPIfNonMatch") != initialStrategy ||
+                proxyInput.text.toString() != initialProxy ||
+                directInput.text.toString() != initialDirect ||
+                blockInput.text.toString() != initialBlock
+
             preferences.edit()
                 .putString(KEY_PROXY, proxyInput.text.toString())
                 .putString(KEY_DIRECT, directInput.text.toString())
                 .putString(KEY_BLOCK, blockInput.text.toString())
                 .apply()
+
+            if (changed && preferences.getString("vpn_state", "disconnected") == "connected") {
+                preferences.edit().putBoolean("site_routing_restart_pending", true).apply()
+            }
         }
         super.onPause()
     }
