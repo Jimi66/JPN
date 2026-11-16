@@ -1332,7 +1332,8 @@ class MainActivity : Activity() {
             .put("protocol", "blackhole")
             .put("settings", JSONObject())
 
-        val globalProxy = routingPreferences.getBoolean("site_global_proxy", true)
+        val siteRoutingEnabled = routingPreferences.getBoolean("site_routing_enabled", false)
+        val globalProxy = !siteRoutingEnabled || routingPreferences.getBoolean("site_global_proxy", true)
         val outbounds = JSONArray()
         if (globalProxy) {
             outbounds.put(JSONObject(selectedOutbound.toString()))
@@ -1352,7 +1353,7 @@ class MainActivity : Activity() {
             .put("xray.location.asset", filesDir.absolutePath)
         config.put("env", env)
 
-        if (routingPreferences.getBoolean("site_routing_enabled", false)) {
+        if (siteRoutingEnabled) {
             val siteLists = mapOf(
                 "proxy" to readRoutingEntries(routingPreferences, "site_proxy_sites"),
                 "direct" to readRoutingEntries(routingPreferences, "site_direct_sites"),
