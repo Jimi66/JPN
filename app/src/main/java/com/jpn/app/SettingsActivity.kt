@@ -6,9 +6,15 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 
 class SettingsActivity : Activity() {
+
+    companion object {
+        private const val PREFS = "jpn_settings"
+        private const val KEY_ROUTING_ENABLED = "routing_enabled"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,11 +50,10 @@ class SettingsActivity : Activity() {
             setPadding(0, 0, 0, dp(16))
         })
 
-        val routing = TextView(this).apply {
-            text = "Маршрутизация приложений"
-            textSize = 16f
-            setTextColor(0xFF202124.toInt())
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+        val routing = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(10), dp(12), dp(10))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xFFF4F5F6.toInt())
                 cornerRadius = dp(14).toFloat()
@@ -69,6 +74,25 @@ class SettingsActivity : Activity() {
                 startActivity(Intent(this@SettingsActivity, AppRoutingActivity::class.java))
             }
         }
+        routing.addView(TextView(this).apply {
+            text = "Маршрутизация приложений"
+            textSize = 16f
+            setTextColor(0xFF202124.toInt())
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val routingSwitch = Switch(this).apply {
+            isChecked = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_ROUTING_ENABLED, true)
+            contentDescription = "Маршрутизация приложений включена"
+            setOnCheckedChangeListener { _, checked ->
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(KEY_ROUTING_ENABLED, checked)
+                    .apply()
+            }
+        }
+        routing.addView(routingSwitch, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
         root.addView(routing, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
