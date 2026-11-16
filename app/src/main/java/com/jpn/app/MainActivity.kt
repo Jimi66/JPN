@@ -307,6 +307,10 @@ class MainActivity : Activity() {
                     textSize = 14f
                     setTextColor(0xFF202124.toInt())
                     setPadding(dp(16), dp(12), dp(16), dp(12))
+                    minHeight = dp(48)
+                    background = selectableItemBackground()
+                    isClickable = true
+                    isFocusable = true
                     setOnClickListener {
                         popupWindow.dismiss()
                         confirmDeleteSubscription()
