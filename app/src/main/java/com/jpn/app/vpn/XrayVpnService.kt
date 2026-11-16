@@ -103,12 +103,13 @@ class XrayVpnService : VpnService() {
 
         // Apply per-app routing before establishing the Android VPN interface.
         val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        val routingEnabled = routingPreferences.getBoolean("routing_enabled", true)
         val routingMode = routingPreferences.getString("routing_mode", "exclude")
         val selectedPackages = routingPreferences
             .getStringSet("routing_packages", emptySet())
             ?.toSet()
             ?: emptySet()
-        if (routingMode == "selected") {
+        if (routingEnabled && routingMode == "selected") {
             var atLeastOneAllowed = false
             selectedPackages.forEach { appPackage ->
                 if (runCatching { builder.addAllowedApplication(appPackage) }.isSuccess) {
@@ -119,7 +120,7 @@ class XrayVpnService : VpnService() {
             // Restrict it to JPN itself instead, so "only selected" + no selection
             // does not unexpectedly turn into full-device routing.
             if (!atLeastOneAllowed) builder.addAllowedApplication(packageName)
-        } else {
+        } else if (routingEnabled) {
             selectedPackages.forEach { appPackage ->
                 runCatching { builder.addDisallowedApplication(appPackage) }
             }
