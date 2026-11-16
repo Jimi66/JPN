@@ -285,14 +285,11 @@ class MainActivity : Activity() {
             setImageResource(R.drawable.jpn_subscription_edit)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             contentDescription = "Изменить список серверов"
+            tooltipText = "Редактировать подписку"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackground, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
-            setOnLongClickListener {
-                android.widget.Toast.makeText(this@MainActivity, "Редактирование подписки — меню управления маршрутизацией и удаления подписки", android.widget.Toast.LENGTH_SHORT).show()
-                true
-            }
             setOnClickListener { anchor ->
                 val popupContent = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -331,14 +328,11 @@ class MainActivity : Activity() {
             setImageResource(R.drawable.jpn_subscription_refresh)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             contentDescription = "Обновить подписку"
+            tooltipText = "Обновить подписку"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
-            setOnLongClickListener {
-                android.widget.Toast.makeText(this@MainActivity, "Обновление подписки — загрузить актуальный список серверов по сохранённой ссылке", android.widget.Toast.LENGTH_SHORT).show()
-                true
-            }
             setOnClickListener {
                 val savedUrl = preferences.getString(KEY_SUBSCRIPTION_URL, null)
                 if (savedUrl.isNullOrBlank()) {
