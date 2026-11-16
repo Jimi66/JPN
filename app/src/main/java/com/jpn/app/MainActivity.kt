@@ -111,6 +111,7 @@ class MainActivity : Activity() {
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.getBooleanExtra(XrayVpnService.EXTRA_TEST_MODE, false) == true) return
             val state = intent?.getStringExtra("state") ?: return
             val message = intent.getStringExtra("message") ?: state
             showState(state, message)
@@ -1018,51 +1019,127 @@ class MainActivity : Activity() {
         pingCheckRunning = true
         button.isEnabled = false
         button.alpha = 0.45f
-        setStatus("Проверяю доступность серверов…")
-
         val snapshot = nodes.map { JSONObject(it.toString()) }
+        val originalWasRunning = isVpnRunning()
+        val originalNode = nodes.getOrNull(selectedNodeIndex)?.let { JSONObject(it.toString()) }
+
+        setStatus("Подготавливаю проверку серверов…")
         Thread {
-            snapshot.forEachIndexed { index, node ->
-                val result = measureServerLatency(node)
-                mainHandler.post {
-                    if (index < nodes.size) {
-                        nodes[index].remove("jpnPingMs")
-                        nodes[index].remove("jpnPingFailed")
-                        if (result != null) {
-                            nodes[index].put("jpnPingMs", result)
-                        } else {
-                            nodes[index].put("jpnPingFailed", true)
-                        }
-                        renderNodes()
+            var restored = !originalWasRunning
+            try {
+                if (originalWasRunning) {
+                    XrayVpnService.stop(this, true)
+                    if (!waitForXrayState(false, 10000)) {
+                        throw IllegalStateException("Не удалось временно отключить VPN")
                     }
                 }
-            }
-            mainHandler.post {
-                pingCheckRunning = false
-                button.isEnabled = true
-                button.alpha = 1f
-                val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
-                setStatus("Проверка завершена: доступно $available из ${nodes.size}")
+
+                snapshot.forEachIndexed { index, savedNode ->
+                    mainHandler.post { setStatus("Проверяю сервер ${index + 1} из ${snapshot.size}…") }
+                    var result: Int? = null
+                    var testStarted = false
+                    try {
+                        val outbound = resolveOutboundForCheck(savedNode)
+                        val config = buildXrayConfig(outbound)
+                        XrayVpnService.start(this, config, true)
+                        if (!waitForXrayState(true, 15000)) {
+                            throw IllegalStateException("Туннель не запустился")
+                        }
+                        testStarted = true
+                        result = measureGoogleLatency()
+                    } catch (_: Exception) {
+                        result = null
+                    } finally {
+                        if (testStarted || isXrayCoreRunning()) {
+                            XrayVpnService.stop(this, true)
+                            waitForXrayState(false, 10000)
+                        }
+                    }
+
+                    mainHandler.post {
+                        if (index < nodes.size) {
+                            nodes[index].remove("jpnPingMs")
+                            nodes[index].remove("jpnPingFailed")
+                            if (result != null) nodes[index].put("jpnPingMs", result)
+                            else nodes[index].put("jpnPingFailed", true)
+                            renderNodes()
+                        }
+                    }
+                }
+            } catch (error: Exception) {
+                mainHandler.post { setStatus(error.message ?: "Ошибка проверки серверов") }
+            } finally {
+                if (originalWasRunning && originalNode != null) {
+                    val restoreResult = runCatching {
+                        val outbound = resolveOutboundForCheck(originalNode)
+                        XrayVpnService.start(this, buildXrayConfig(outbound), false)
+                        waitForXrayState(true, 15000)
+                    }.getOrDefault(false)
+                    restored = restoreResult
+                } else if (isXrayCoreRunning()) {
+                    XrayVpnService.stop(this, true)
+                    waitForXrayState(false, 10000)
+                }
+
+                mainHandler.post {
+                    pingCheckRunning = false
+                    button.isEnabled = true
+                    button.alpha = 1f
+                    val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
+                    val summary = "Проверка завершена: доступно $available из ${nodes.size}"
+                    setStatus(
+                        when {
+                            originalWasRunning && restored -> "$summary. Прежнее VPN-подключение восстановлено"
+                            originalWasRunning -> "$summary. Не удалось восстановить прежнее VPN-подключение"
+                            else -> summary
+                        }
+                    )
+                }
             }
         }.start()
     }
 
-    private fun measureServerLatency(outbound: JSONObject): Int? {
-        val settings = outbound.optJSONObject("settings") ?: return null
-        val vnext = settings.optJSONArray("vnext")?.optJSONObject(0)
-        val server = settings.optJSONArray("servers")?.optJSONObject(0)
-        val endpoint = vnext ?: server ?: return null
-        val host = endpoint.optString("address").trim()
-        val port = endpoint.optInt("port", 0)
-        if (host.isBlank() || port !in 1..65535) return null
+    private fun resolveOutboundForCheck(node: JSONObject): JSONObject {
+        val rawShareLink = node.optString("jpnRawShareLink")
+        if (rawShareLink.isBlank()) return JSONObject(node.toString())
+        val parsed = parseShareLinks(rawShareLink)
+        if (parsed.length() == 0) throw IllegalArgumentException("Не удалось разобрать конфигурацию сервера")
+        return JSONObject(parsed.getJSONObject(0).toString())
+    }
 
+    private fun isXrayCoreRunning(): Boolean {
         return runCatching {
-            val started = System.nanoTime()
-            java.net.Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress(host, port), 2500)
+            val request = JSONObject().put("apiVersion", 3).put("method", "getXrayState")
+            JSONObject(LibXray.invoke(request.toString())).opt("data") == true
+        }.getOrDefault(false)
+    }
+
+    private fun waitForXrayState(expected: Boolean, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (isXrayCoreRunning() == expected) return true
+            Thread.sleep(200)
+        }
+        return isXrayCoreRunning() == expected
+    }
+
+    private fun measureGoogleLatency(): Int {
+        val started = System.nanoTime()
+        val connection = (URL("https://www.google.com/generate_204").openConnection() as HttpURLConnection)
+        connection.connectTimeout = 7000
+        connection.readTimeout = 7000
+        connection.requestMethod = "GET"
+        connection.instanceFollowRedirects = true
+        connection.setRequestProperty("Cache-Control", "no-cache")
+        try {
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..399) {
+                throw IllegalStateException("Google вернул HTTP $responseCode")
             }
-            ((System.nanoTime() - started) / 1_000_000L).toInt().coerceAtLeast(1)
-        }.getOrNull()
+            return ((System.nanoTime() - started) / 1_000_000L).toInt().coerceAtLeast(1)
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun renderNodes() {
