@@ -544,7 +544,7 @@ class MainActivity : Activity() {
 
         fun usable(candidate: String?): String? {
             val text = candidate?.trim() ?: return null
-            if (text.isBlank() || '\uFFFD' in text) return null
+            if (text.isBlank() || text.any { it.code == 65533 }) return null
             if (text.any { it.isISOControl() && !it.isWhitespace() }) return null
             return text.takeIf { it.any { char -> char.isLetterOrDigit() } }
         }
