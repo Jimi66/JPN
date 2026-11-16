@@ -107,12 +107,16 @@ class MainActivity : Activity() {
     private var selectedNodeIndex = -1
     private var lastHapticVpnState: String? = null
     private var pingCheckRunning = false
+    @Volatile private var lastTestVpnError: String? = null
     @Volatile private var downloadedSubscriptionName: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.getBooleanExtra(XrayVpnService.EXTRA_TEST_MODE, false) == true) return
             val state = intent?.getStringExtra("state") ?: return
+            if (intent.getBooleanExtra(XrayVpnService.EXTRA_TEST_MODE, false)) {
+                if (state == "error") lastTestVpnError = intent.getStringExtra("message") ?: "Неизвестная ошибка запуска Xray"
+                return
+            }
             val message = intent.getStringExtra("message") ?: state
             showState(state, message)
             if (state == "disconnected" && pendingSelectedOutbound != null) {
@@ -1024,6 +1028,7 @@ class MainActivity : Activity() {
         val snapshot = nodes.map { JSONObject(it.toString()) }
         val originalWasRunning = isVpnRunning()
         val originalNode = nodes.getOrNull(selectedNodeIndex)?.let { JSONObject(it.toString()) }
+        val failures = mutableListOf<String>()
 
         setStatus("Подготавливаю проверку серверов…")
         Thread {
@@ -1039,18 +1044,28 @@ class MainActivity : Activity() {
                 snapshot.forEachIndexed { index, savedNode ->
                     mainHandler.post { setStatus("Проверяю сервер ${index + 1} из ${snapshot.size}…") }
                     var result: Int? = null
+                    var failure: String? = null
                     var testStarted = false
+                    lastTestVpnError = null
                     try {
                         val outbound = resolveOutboundForCheck(savedNode)
                         val config = buildXrayConfig(outbound)
                         XrayVpnService.start(this, config, true)
                         if (!waitForXrayState(true, 15000)) {
-                            throw IllegalStateException("Туннель не запустился")
+                            val serviceError = lastTestVpnError
+                            throw IllegalStateException(
+                                serviceError?.let { "Xray не запустился: $it" }
+                                    ?: "Тестовый туннель не запустился за 15 секунд (getXrayState не подтвердил запуск)"
+                            )
                         }
                         testStarted = true
                         result = measureGoogleLatency()
-                    } catch (_: Exception) {
-                        result = null
+                    } catch (error: Exception) {
+                        failure = generateSequence(error as Throwable?) { it.cause }
+                            .take(5)
+                            .joinToString(" → ") { cause ->
+                                "${cause.javaClass.simpleName}: ${cause.message ?: "без текста"}"
+                            }
                     } finally {
                         if (testStarted || isXrayCoreRunning()) {
                             XrayVpnService.stop(this, true)
@@ -1062,14 +1077,21 @@ class MainActivity : Activity() {
                         if (index < nodes.size) {
                             nodes[index].remove("jpnPingMs")
                             nodes[index].remove("jpnPingFailed")
-                            if (result != null) nodes[index].put("jpnPingMs", result)
-                            else nodes[index].put("jpnPingFailed", true)
+                            nodes[index].remove("jpnPingError")
+                            if (result != null) {
+                                nodes[index].put("jpnPingMs", result)
+                            } else {
+                                nodes[index].put("jpnPingFailed", true)
+                                nodes[index].put("jpnPingError", failure ?: "Причина не определена")
+                                val serverName = savedNode.optString("tag").ifBlank { "Сервер ${index + 1}" }
+                                failures.add("$serverName: ${failure ?: "Причина не определена"}")
+                            }
                             renderNodes()
                         }
                     }
                 }
             } catch (error: Exception) {
-                mainHandler.post { setStatus(error.message ?: "Ошибка проверки серверов") }
+                failures.add("Общая ошибка проверки: ${error.javaClass.simpleName}: ${error.message ?: "без текста"}")
             } finally {
                 if (originalWasRunning && originalNode != null) {
                     val restoreResult = runCatching {
@@ -1098,6 +1120,13 @@ class MainActivity : Activity() {
                             else -> summary
                         }
                     )
+                    if (failures.isNotEmpty()) {
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("Причины ошибок проверки")
+                            .setMessage(failures.joinToString("\n\n"))
+                            .setPositiveButton("Понятно", null)
+                            .show()
+                    }
                 }
             }
         }.start()
