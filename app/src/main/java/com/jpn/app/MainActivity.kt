@@ -251,7 +251,7 @@ class MainActivity : Activity() {
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackground, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             setOnClickListener { anchor ->
                 android.widget.PopupMenu(this@MainActivity, anchor).apply {
                     menu.add("Маршрутизация приложений").setOnMenuItemClickListener {
@@ -272,7 +272,7 @@ class MainActivity : Activity() {
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             setOnClickListener {
                 val savedUrl = preferences.getString(KEY_SUBSCRIPTION_URL, null)
                 if (savedUrl.isNullOrBlank()) {
