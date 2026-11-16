@@ -182,7 +182,7 @@ class SiteRoutingActivity : Activity() {
             value.matches(Regex("^(\\d{1,3}\\.){3}\\d{1,3}(/\\d{1,2})?$")) ||
                 value.contains(":")
         } else {
-            value.matches(Regex("^(?i)([a-z0-9-]+\\.)*[a-z0-9-]+$")) ||
+            value.matches(Regex("(?i)^([a-z0-9-]+\\.)*[a-z0-9-]+$")) ||
                 value.startsWith("domain:") || value.startsWith("full:")
         }
         if (!valid) {
