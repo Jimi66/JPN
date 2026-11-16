@@ -194,11 +194,18 @@ class AppRoutingActivity : Activity() {
         if (!::appList.isInitialized) return
         appList.removeAllViews()
         val query = searchInput.text.toString().trim()
-        val visibleApps = apps.filter {
-            query.isBlank() ||
-                it.label.contains(query, ignoreCase = true) ||
-                it.packageName.contains(query, ignoreCase = true)
-        }
+        val visibleApps = apps
+            .filter {
+                query.isBlank() ||
+                    it.label.contains(query, ignoreCase = true) ||
+                    it.packageName.contains(query, ignoreCase = true)
+            }
+            .sortedWith(
+                compareByDescending<AppEntry> { selectedPackages.contains(it.packageName) }
+                    .thenComparator { first, second ->
+                        Collator.getInstance(Locale.getDefault()).compare(first.label, second.label)
+                    }
+            )
 
         selectedCount.text = "Выбрано приложений: ${selectedPackages.size}"
 
@@ -237,6 +244,7 @@ class AppRoutingActivity : Activity() {
                         .putStringSet(KEY_ROUTING_PACKAGES, HashSet(selectedPackages))
                         .apply()
                     selectedCount.text = "Выбрано приложений: ${selectedPackages.size}"
+                    renderApps()
                 }
             }
             row.addView(checkBox, LinearLayout.LayoutParams(
