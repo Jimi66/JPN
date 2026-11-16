@@ -233,8 +233,11 @@ class MainActivity : Activity() {
             addView(statusView, matchWidth())
         }
         root.addView(vpnArea, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(120)
+            bottomMargin = dp(12)
+        })
 
         nodesHeader = TextView(this).apply {
             text = "Серверы пока не добавлены"
