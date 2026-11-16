@@ -196,7 +196,8 @@ class MainActivity : Activity() {
             contentDescription = "Включить или выключить VPN"
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             setPadding(dp(43), dp(43), dp(43), dp(43))
-            setImageDrawable(PowerSymbolDrawable(0xFF706AA5.toInt()))
+            setImageResource(R.drawable.jpn_power_symbol)
+            imageTintList = android.content.res.ColorStateList.valueOf(0xFF706AA5.toInt())
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 setColor(0xFFE1E3F7.toInt())
@@ -1253,7 +1254,8 @@ class MainActivity : Activity() {
         if (!::vpnButton.isInitialized) return
         val backgroundColor = if (running) 0xFF706AA5.toInt() else 0xFFE1E3F7.toInt()
         val symbolColor = if (running) 0xFFE1E3F7.toInt() else 0xFF706AA5.toInt()
-        vpnButton.setImageDrawable(PowerSymbolDrawable(symbolColor))
+        vpnButton.setImageResource(R.drawable.jpn_power_symbol)
+        vpnButton.imageTintList = android.content.res.ColorStateList.valueOf(symbolColor)
         (vpnButton.background as? android.graphics.drawable.GradientDrawable)?.setColor(backgroundColor)
     }
 
