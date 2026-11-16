@@ -994,6 +994,10 @@ class MainActivity : Activity() {
      */
     private fun checkServersLatency(button: ImageButton? = null) {
         if (pingCheckRunning) return
+        if (isVpnRunning()) {
+            setStatus("Проверка задержки доступна при выключенном VPN")
+            return
+        }
         if (nodes.isEmpty()) {
             setStatus("Нет серверов для проверки")
             return
