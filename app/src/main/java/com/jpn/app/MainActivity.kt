@@ -245,7 +245,8 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(12), dp(4), dp(8))
         }
         val nodesMenuButton = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_edit)
+            setImageResource(R.drawable.jpn_subscription_edit)
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             contentDescription = "Изменить список серверов"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackground, selectableBackground, true)
