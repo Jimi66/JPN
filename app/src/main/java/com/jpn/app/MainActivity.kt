@@ -1282,10 +1282,52 @@ class MainActivity : Activity() {
                 .put("protocol", "blackhole")
                 .put("settings", JSONObject())
         )
-        return JSONObject()
+
+        val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put("outbounds", outbounds)
-            .toString()
+
+        val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        if (routingPreferences.getBoolean("site_routing_enabled", false)) {
+            val savedRules = runCatching {
+                JSONArray(routingPreferences.getString("site_routing_rules", "[]"))
+            }.getOrDefault(JSONArray())
+            val rules = JSONArray()
+            val proxyTag = selectedOutbound.optString("tag").ifBlank { "proxy" }
+
+            for (index in 0 until savedRules.length()) {
+                val savedRule = savedRules.optJSONObject(index) ?: continue
+                val value = savedRule.optString("value").trim()
+                if (value.isBlank()) continue
+
+                val actionTag = when (savedRule.optString("action")) {
+                    "direct" -> "jpn-direct"
+                    "block" -> "jpn-block"
+                    else -> proxyTag
+                }
+                val rule = JSONObject().put("type", "field")
+                if (savedRule.optString("type") == "ip") {
+                    rule.put("ip", JSONArray().put(value))
+                } else {
+                    val domainValue = when {
+                        value.startsWith("domain:") || value.startsWith("full:") ||
+                            value.startsWith("regexp:") || value.startsWith("geosite:") -> value
+                        else -> "domain:$value"
+                    }
+                    rule.put("domain", JSONArray().put(domainValue))
+                }
+                rule.put("outboundTag", actionTag)
+                rules.put(rule)
+            }
+
+            if (rules.length() > 0) {
+                config.put("routing", JSONObject()
+                    .put("domainStrategy",
+                        routingPreferences.getString("site_domain_strategy", "IPIfNonMatch"))
+                    .put("rules", rules))
+            }
+        }
+        return config.toString()
     }
 
     @Suppress("DEPRECATION")
