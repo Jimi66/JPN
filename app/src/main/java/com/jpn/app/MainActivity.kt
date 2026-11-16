@@ -335,7 +335,7 @@ class MainActivity : Activity() {
             clipToOutline = true
             addView(nodesHeaderRow, matchWidth())
             addView(nodesContainer, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(280)
+                LinearLayout.LayoutParams.MATCH_PARENT, 0
             ))
         }
         serverCard.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
@@ -526,16 +526,42 @@ class MainActivity : Activity() {
             val profileTitle = connection.getHeaderField("profile-title")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-            downloadedSubscriptionName = profileTitle?.let { raw ->
-                val decoded = runCatching {
-                    String(Base64.decode(raw, Base64.DEFAULT), StandardCharsets.UTF_8).trim()
-                }.getOrNull()
-                decoded?.takeIf { it.isNotBlank() } ?: raw
-            }
+            downloadedSubscriptionName = profileTitle?.let { decodeProfileTitle(it) }
             return String(output.toByteArray(), StandardCharsets.UTF_8)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun decodeProfileTitle(raw: String): String? {
+        val value = raw.trim()
+        if (value.isBlank()) return null
+
+        fun usable(candidate: String?): String? {
+            val text = candidate?.trim() ?: return null
+            if (text.isBlank() || '\\uFFFD' in text) return null
+            if (text.any { it.isISOControl() && !it.isWhitespace() }) return null
+            return text.takeIf { it.any { char -> char.isLetterOrDigit() } }
+        }
+
+        val compact = value.filterNot { it.isWhitespace() }
+        val decoded = listOf(
+            Base64.DEFAULT,
+            Base64.URL_SAFE or Base64.NO_WRAP,
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        ).firstNotNullOfOrNull { flags ->
+            runCatching {
+                usable(String(Base64.decode(compact, flags), StandardCharsets.UTF_8))
+            }.getOrNull()
+        }
+        if (decoded != null) return decoded
+
+        // Some servers expose a UTF-8 header through a Latin-1 decoder.
+        val repaired = runCatching {
+            val bytes = ByteArray(value.length) { index -> value[index].code.toByte() }
+            usable(String(bytes, StandardCharsets.UTF_8))
+        }.getOrNull()
+        return repaired ?: usable(value)
     }
 
     private fun decodeSubscriptionBody(body: String): String {
@@ -924,7 +950,11 @@ class MainActivity : Activity() {
         nodesHeader.text = if (nodes.isEmpty()) {
             "Серверы не найдены"
         } else {
-            preferences.getString(KEY_SUBSCRIPTION_NAME, null)?.takeIf { it.isNotBlank() }
+            val savedName = preferences.getString(KEY_SUBSCRIPTION_NAME, null)
+            decodeProfileTitle(savedName.orEmpty())
+                ?: runCatching {
+                    URL(preferences.getString(KEY_SUBSCRIPTION_URL, null)).host
+                }.getOrNull()?.takeIf { it.isNotBlank() }
                 ?: "Подписка"
         }
 
@@ -954,6 +984,31 @@ class MainActivity : Activity() {
         }
         (nodesContainer.parent as? android.view.View)?.visibility =
             if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+
+        // Size the list to its actual rows (up to 280dp); longer lists scroll
+        // inside the card instead of leaving a large empty area underneath.
+        nodesContainer.post {
+            val adapter = nodesContainer.adapter ?: return@post
+            val availableWidth = nodesContainer.width
+            if (availableWidth <= 0 || adapter.count == 0) return@post
+            var contentHeight = 0
+            for (index in 0 until adapter.count) {
+                val row = adapter.getView(index, null, nodesContainer)
+                row.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(
+                        availableWidth, android.view.View.MeasureSpec.EXACTLY
+                    ),
+                    android.view.View.MeasureSpec.makeMeasureSpec(
+                        0, android.view.View.MeasureSpec.UNSPECIFIED
+                    )
+                )
+                contentHeight += row.measuredHeight
+            }
+            contentHeight += nodesContainer.dividerHeight * (adapter.count - 1).coerceAtLeast(0)
+            val params = nodesContainer.layoutParams
+            params.height = contentHeight.coerceAtMost(dp(280))
+            nodesContainer.layoutParams = params
+        }
     }
 
     private fun connectToOutbound(outbound: JSONObject, name: String) {
