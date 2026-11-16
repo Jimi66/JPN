@@ -113,7 +113,7 @@ class XrayVpnService : VpnService() {
 
         // Apply the user routing rules only for regular VPN sessions.
         val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
-        val routingEnabled = routingPreferences.getBoolean("routing_enabled", true)
+        val routingEnabled = routingPreferences.getBoolean("routing_enabled", false)
         val routingMode = routingPreferences.getString("routing_mode", "exclude")
         val selectedPackages = routingPreferences
             .getStringSet("routing_packages", emptySet())
