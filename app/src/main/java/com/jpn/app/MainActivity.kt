@@ -285,7 +285,8 @@ class MainActivity : Activity() {
         }
         val pingButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_ping_speedometer)
-            contentDescription = "Ping"
+            contentDescription = "Проверка серверов"
+            tooltipText = "Проверка серверов"
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
