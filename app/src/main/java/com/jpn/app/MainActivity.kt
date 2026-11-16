@@ -549,7 +549,9 @@ class MainActivity : Activity() {
             return text.takeIf { it.any { char -> char.isLetterOrDigit() } }
         }
 
-        val compact = value.filterNot { it.isWhitespace() }
+        // profile-title may be explicitly wrapped as "base64:<payload>".
+        val encodedValue = value.removePrefix("base64:").removePrefix("BASE64:")
+        val compact = encodedValue.filterNot { it.isWhitespace() }
         val decoded = listOf(
             Base64.DEFAULT,
             Base64.URL_SAFE or Base64.NO_WRAP,
