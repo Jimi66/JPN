@@ -374,7 +374,7 @@ class MainActivity : Activity() {
             }
         }
         val settingsButton = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_preferences)
+            setImageResource(R.drawable.jpn_settings_gear)
             contentDescription = "Настройки"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
