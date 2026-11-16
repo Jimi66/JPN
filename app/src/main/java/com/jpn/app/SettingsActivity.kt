@@ -17,6 +17,15 @@ class SettingsActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(12), dp(18), dp(12))
         }
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            view.setPadding(
+                dp(18),
+                dp(12) + insets.systemWindowInsetTop,
+                dp(18),
+                dp(12) + insets.systemWindowInsetBottom
+            )
+            insets
+        }
 
         val back = TextView(this).apply {
             text = "‹   Назад"
