@@ -244,7 +244,7 @@ class MainActivity : Activity() {
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackground, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(5), dp(5), dp(5), dp(5))
             setOnClickListener { anchor ->
                 android.widget.PopupMenu(this@MainActivity, anchor).apply {
                     menu.add("Маршрутизация приложений").setOnMenuItemClickListener {
@@ -262,7 +262,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(nodesHeader, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(nodesMenuButton, LinearLayout.LayoutParams(dp(44), dp(44)))
+            addView(nodesMenuButton, LinearLayout.LayoutParams(dp(36), dp(36)))
         }
 
         nodesContainer = ListView(this).apply {
