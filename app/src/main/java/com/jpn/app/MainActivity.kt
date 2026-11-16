@@ -294,6 +294,7 @@ class MainActivity : Activity() {
                 routingRow.addView(routingLabel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 routingRow.addView(routingSwitch)
                 popupContent.addView(routingRow)
+                lateinit var popupWindow: android.widget.PopupWindow
                 val deleteRow = TextView(this@MainActivity).apply {
                     text = "Удалить подписку"
                     textSize = 14f
@@ -305,7 +306,7 @@ class MainActivity : Activity() {
                     }
                 }
                 popupContent.addView(deleteRow)
-                val popupWindow = android.widget.PopupWindow(
+                popupWindow = android.widget.PopupWindow(
                     popupContent, dp(280), android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true
                 ).apply {
                     elevation = dp(8).toFloat()
