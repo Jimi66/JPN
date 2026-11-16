@@ -999,6 +999,7 @@ class MainActivity : Activity() {
         }
 
         pingCheckRunning = true
+        vibrateForVpnTransition()
         button?.isEnabled = false
         button?.alpha = 0.45f
         vpnButton.isEnabled = false
