@@ -1034,7 +1034,6 @@ class MainActivity : Activity() {
         nodesContainer.isEnabled = false
 
         val snapshot = nodes.map { JSONObject(it.toString()) }
-        val failures = mutableListOf<String>()
         setStatus("Подготавливаю проверку серверов…")
 
         Thread {
@@ -1101,8 +1100,6 @@ class MainActivity : Activity() {
                             } else {
                                 nodes[index].put("jpnPingFailed", true)
                                 nodes[index].put("jpnPingError", failure ?: "Причина не определена")
-                                val serverName = savedNode.optString("tag").ifBlank { "Сервер ${index + 1}" }
-                                failures.add("$serverName: ${failure ?: "Причина не определена"}")
                             }
                             renderNodes()
                         }
@@ -1117,13 +1114,6 @@ class MainActivity : Activity() {
                     nodesContainer.isEnabled = true
                     val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
                     setStatus("Проверка завершена: доступно $available из ${nodes.size}")
-                    if (failures.isNotEmpty()) {
-                        android.app.AlertDialog.Builder(this)
-                            .setTitle("Причины ошибок проверки")
-                            .setMessage(failures.joinToString("\n\n"))
-                            .setPositiveButton("Понятно", null)
-                            .show()
-                    }
                 }
             }
         }.start()
