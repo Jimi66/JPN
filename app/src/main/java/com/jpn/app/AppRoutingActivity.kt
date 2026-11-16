@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import java.text.Collator
 import java.util.Locale
@@ -25,6 +26,7 @@ class AppRoutingActivity : Activity() {
     companion object {
         private const val PREFS = "jpn_settings"
         private const val KEY_ROUTING_MODE = "routing_mode"
+        private const val KEY_ROUTING_ENABLED = "routing_enabled"
         private const val KEY_ROUTING_PACKAGES = "routing_packages"
         private const val MODE_EXCLUDE = "exclude"
         private const val MODE_SELECTED = "selected"
@@ -112,6 +114,32 @@ class AppRoutingActivity : Activity() {
             setPadding(0, dp(5), 0, dp(12))
         }
         root.addView(description)
+
+        val routingToggleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(8), dp(12), dp(8))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFF4F5F6.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+        }
+        routingToggleRow.addView(TextView(this).apply {
+            text = "Включить маршрутизацию приложений"
+            textSize = 15f
+            setTextColor(0xFF202124.toInt())
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val routingSwitch = Switch(this).apply {
+            isChecked = preferences.getBoolean(KEY_ROUTING_ENABLED, false)
+            contentDescription = "Маршрутизация приложений включена"
+            setOnCheckedChangeListener { _, checked ->
+                preferences.edit().putBoolean(KEY_ROUTING_ENABLED, checked).apply()
+            }
+        }
+        routingToggleRow.addView(routingSwitch)
+        root.addView(routingToggleRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
 
         modeGroup = RadioGroup(this).apply {
             orientation = RadioGroup.VERTICAL
