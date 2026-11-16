@@ -37,7 +37,7 @@ class SettingsActivity : Activity() {
         root.addView(back)
 
         root.addView(TextView(this).apply {
-            text = "Настройки"
+            text = "Настройки TUN модуля"
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(0xFF202124.toInt())
