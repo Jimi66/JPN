@@ -247,6 +247,12 @@ class MainActivity : Activity() {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
                 setColor(0xFFE1E3F7.toInt())
             }
+            // Force the view's outline to follow the oval background, not the
+            // rectangular ImageButton bounds supplied by the platform theme.
+            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
+            minimumWidth = 0
+            minimumHeight = 0
             elevation = dp(12).toFloat()
             foreground = null
             stateListAnimator = null
@@ -1540,7 +1546,12 @@ class MainActivity : Activity() {
         val symbolColor = if (running) 0xFFE1E3F7.toInt() else 0xFF706AA5.toInt()
         vpnButton.setImageResource(R.drawable.jpn_power_symbol)
         vpnButton.imageTintList = android.content.res.ColorStateList.valueOf(symbolColor)
-        (vpnButton.background as? android.graphics.drawable.GradientDrawable)?.setColor(backgroundColor)
+        vpnButton.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+            setColor(backgroundColor)
+        }
+        vpnButton.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        vpnButton.clipToOutline = true
     }
 
     private fun setStatus(message: String) {
