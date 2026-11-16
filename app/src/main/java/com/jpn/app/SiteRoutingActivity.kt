@@ -64,28 +64,14 @@ class SiteRoutingActivity : Activity() {
             setOnClickListener { finish() }
         })
 
-        root.addView(TextView(this).apply {
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleRow.addView(TextView(this).apply {
             text = "Маршрутизация сайтов"
             textSize = 21f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(0xFF202124.toInt())
-        })
-        root.addView(TextView(this).apply {
-            text = "Задавай правила для доменов и IP-адресов. Правила применяются сверху вниз."
-            textSize = 14f
-            setTextColor(0xFF666666.toInt())
-            setPadding(0, dp(5), 0, dp(12))
-        })
-
-        val toggleRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(8), dp(12), dp(8))
-            background = cardBackground()
-        }
-        toggleRow.addView(TextView(this).apply {
-            text = "Включить маршрутизацию сайтов"
-            textSize = 15f
             setTextColor(0xFF202124.toInt())
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         enabledSwitch = Switch(this).apply {
@@ -94,8 +80,15 @@ class SiteRoutingActivity : Activity() {
                 preferences.edit().putBoolean(KEY_ENABLED, checked).apply()
             }
         }
-        toggleRow.addView(enabledSwitch)
-        root.addView(toggleRow, matchWidth().apply { bottomMargin = dp(12) })
+        titleRow.addView(enabledSwitch)
+        root.addView(titleRow, matchWidth().apply { bottomMargin = dp(5) })
+
+        root.addView(TextView(this).apply {
+            text = "Задавай правила для доменов и IP-адресов. Правила применяются сверху вниз."
+            textSize = 14f
+            setTextColor(0xFF666666.toInt())
+            setPadding(0, dp(5), 0, dp(12))
+        })
 
         root.addView(TextView(this).apply {
             text = "Domain Strategy"
