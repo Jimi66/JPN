@@ -61,6 +61,20 @@ class SettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
+        // Keep the credits discreetly anchored to the bottom of Settings.
+        root.addView(android.view.View(this), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        root.addView(TextView(this).apply {
+            text = "Stephanie GPT & Alex DZH"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF9A9AA0.toInt())
+            setPadding(0, dp(8), 0, dp(4))
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
         setContentView(root)
     }
 
