@@ -231,9 +231,8 @@ class MainActivity : Activity() {
             setImageResource(R.drawable.jpn_power_symbol)
             imageTintList = android.content.res.ColorStateList.valueOf(0xFF706AA5.toInt())
             background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                shape = android.graphics.drawable.GradientDrawable.OVAL
                 setColor(0xFFE1E3F7.toInt())
-                cornerRadius = dp(34).toFloat()
             }
             elevation = dp(12).toFloat()
             foreground = null
