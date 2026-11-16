@@ -276,12 +276,19 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(8), dp(4), dp(8), dp(4))
                 }
+                lateinit var popupWindow: android.widget.PopupWindow
                 val routingLabel = TextView(this@MainActivity).apply {
                     text = "Маршрутизация приложений"
                     textSize = 14f
                     setTextColor(0xFF202124.toInt())
-                    setPadding(0, dp(8), dp(8), dp(8))
+                    setPadding(0, dp(12), dp(8), dp(12))
+                    minHeight = dp(48)
+                    // All settings/menu rows use the platform ripple feedback.
+                    background = selectableItemBackground()
+                    isClickable = true
+                    isFocusable = true
                     setOnClickListener {
+                        popupWindow.dismiss()
                         startActivity(Intent(this@MainActivity, AppRoutingActivity::class.java))
                     }
                 }
@@ -294,7 +301,6 @@ class MainActivity : Activity() {
                 routingRow.addView(routingLabel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 routingRow.addView(routingSwitch)
                 popupContent.addView(routingRow)
-                lateinit var popupWindow: android.widget.PopupWindow
                 val deleteRow = TextView(this@MainActivity).apply {
                     text = "Удалить подписку"
                     textSize = 14f
@@ -1314,6 +1320,16 @@ class MainActivity : Activity() {
         val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         manager.hideSoftInputFromWindow(subscriptionInput.windowToken, HIDE_NOT_ALWAYS)
         subscriptionInput.clearFocus()
+    }
+
+    /**
+     * Apply standard Android pressed/ripple feedback to every settings row.
+     * Reuse this helper for all settings items added in the future.
+     */
+    private fun selectableItemBackground(): android.graphics.drawable.Drawable? {
+        val value = android.util.TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackground, value, true)
+        return if (value.resourceId != 0) getDrawable(value.resourceId) else null
     }
 
     private fun matchWidth() = LinearLayout.LayoutParams(
