@@ -277,10 +277,21 @@ class MainActivity : Activity() {
                 }
             }
         }
+        val pingButton = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_compass)
+            contentDescription = "Ping"
+            val selectableBackground = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
+            background = getDrawable(selectableBackground.resourceId)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            isEnabled = false
+            alpha = 0.55f
+        }
         val nodesHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(nodesHeader, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(pingButton, LinearLayout.LayoutParams(dp(36), dp(36)))
             addView(refreshSubscriptionButton, LinearLayout.LayoutParams(dp(36), dp(36)))
             addView(nodesMenuButton, LinearLayout.LayoutParams(dp(36), dp(36)))
         }
