@@ -1321,54 +1321,75 @@ class MainActivity : Activity() {
     }
 
     private fun buildXrayConfig(selectedOutbound: JSONObject): String {
+        val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        val proxyTag = selectedOutbound.optString("tag").ifBlank { "proxy" }
+        val directOutbound = JSONObject()
+            .put("tag", "jpn-direct")
+            .put("protocol", "freedom")
+            .put("settings", JSONObject())
+        val blockOutbound = JSONObject()
+            .put("tag", "jpn-block")
+            .put("protocol", "blackhole")
+            .put("settings", JSONObject())
+
+        val globalProxy = routingPreferences.getBoolean("site_global_proxy", true)
         val outbounds = JSONArray()
-        outbounds.put(JSONObject(selectedOutbound.toString()))
-        outbounds.put(
-            JSONObject()
-                .put("tag", "jpn-direct")
-                .put("protocol", "freedom")
-                .put("settings", JSONObject())
-        )
-        outbounds.put(
-            JSONObject()
-                .put("tag", "jpn-block")
-                .put("protocol", "blackhole")
-                .put("settings", JSONObject())
-        )
+        if (globalProxy) {
+            outbounds.put(JSONObject(selectedOutbound.toString()))
+            outbounds.put(directOutbound)
+        } else {
+            outbounds.put(directOutbound)
+            outbounds.put(JSONObject(selectedOutbound.toString()))
+        }
+        outbounds.put(blockOutbound)
 
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put("outbounds", outbounds)
 
-        val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        // Xray resolves geoip.dat/geosite.dat from this directory.
+        val env = JSONObject()
+            .put("xray.location.asset", filesDir.absolutePath)
+        config.put("env", env)
+
         if (routingPreferences.getBoolean("site_routing_enabled", false)) {
-            val rules = JSONArray()
-            val proxyTag = selectedOutbound.optString("tag").ifBlank { "proxy" }
-            val sections = listOf(
-                "block" to "jpn-block",
-                "direct" to "jpn-direct",
-                "proxy" to proxyTag
+            val siteLists = mapOf(
+                "proxy" to readRoutingEntries(routingPreferences, "site_proxy_sites"),
+                "direct" to readRoutingEntries(routingPreferences, "site_direct_sites"),
+                "block" to readRoutingEntries(routingPreferences, "site_block_sites")
             )
-            for ((section, outboundTag) in sections) {
-                val raw = routingPreferences.getString("site_${section}_rules", "").orEmpty()
+            val ipLists = mapOf(
+                "proxy" to readRoutingEntries(routingPreferences, "site_proxy_ip"),
+                "direct" to readRoutingEntries(routingPreferences, "site_direct_ip"),
+                "block" to readRoutingEntries(routingPreferences, "site_block_ip")
+            )
+            val routeOrder = when (routingPreferences.getString("site_route_order", "Block → Direct → Proxy")) {
+                "Direct → Block → Proxy" -> listOf("direct", "block", "proxy")
+                "Proxy → Direct → Block" -> listOf("proxy", "direct", "block")
+                "Proxy → Block → Direct" -> listOf("proxy", "block", "direct")
+                "Direct → Proxy → Block" -> listOf("direct", "proxy", "block")
+                "Block → Proxy → Direct" -> listOf("block", "proxy", "direct")
+                else -> listOf("block", "direct", "proxy")
+            }
+            val tags = mapOf("proxy" to proxyTag, "direct" to "jpn-direct", "block" to "jpn-block")
+            val rules = JSONArray()
+            for (section in routeOrder) {
                 val domains = JSONArray()
                 val ips = JSONArray()
-                raw.lineSequence().map { it.substringBefore("#").trim() }
-                    .filter { it.isNotBlank() }
-                    .forEach { entry ->
-                        when {
-                            entry.startsWith("geoip:", true) -> ips.put(entry)
-                            entry.startsWith("geosite:", true) ||
-                                entry.startsWith("domain:", true) ||
-                                entry.startsWith("full:", true) ||
-                                entry.startsWith("regexp:", true) -> domains.put(entry)
-                            entry.matches(Regex("""^(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?$""")) ||
-                                entry.contains(":") -> ips.put(entry)
-                            else -> domains.put(if (entry.startsWith("domain:", true)) entry else "domain:$entry")
-                        }
+                (siteLists[section].orEmpty() + ipLists[section].orEmpty()).forEach { entry ->
+                    when {
+                        entry.startsWith("geoip:", true) -> ips.put(entry)
+                        entry.startsWith("geosite:", true) ||
+                            entry.startsWith("domain:", true) ||
+                            entry.startsWith("full:", true) ||
+                            entry.startsWith("regexp:", true) -> domains.put(entry)
+                        entry.matches(Regex("""^(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?$""")) ||
+                            entry.contains(":") -> ips.put(entry)
+                        else -> domains.put("domain:$entry")
                     }
+                }
                 if (domains.length() == 0 && ips.length() == 0) continue
-                val rule = JSONObject().put("type", "field").put("outboundTag", outboundTag)
+                val rule = JSONObject().put("type", "field").put("outboundTag", tags.getValue(section))
                 if (domains.length() > 0) rule.put("domain", domains)
                 if (ips.length() > 0) rule.put("ip", ips)
                 rules.put(rule)
@@ -1378,9 +1399,75 @@ class MainActivity : Activity() {
                     .put("domainStrategy", routingPreferences.getString("site_domain_strategy", "IPIfNonMatch"))
                     .put("rules", rules))
             }
+
+            val dnsServers = JSONArray()
+            val remoteType = routingPreferences.getString("site_remote_dns_type", "DoH")
+            val domesticType = routingPreferences.getString("site_domestic_dns_type", "DoH")
+            val remoteAddress = routingPreferences.getString("site_remote_dns", "https://cloudflare-dns.com/dns-query").orEmpty().trim()
+            val domesticAddress = routingPreferences.getString("site_domestic_dns", "https://dns.google/dns-query").orEmpty().trim()
+            val remoteIp = routingPreferences.getString("site_remote_dns_ip", "1.1.1.1").orEmpty().trim()
+            val domesticIp = routingPreferences.getString("site_domestic_dns_ip", "8.8.8.8").orEmpty().trim()
+            val proxyDnsAddress = if (remoteType == "DoU") remoteIp else remoteAddress
+            val directDnsAddress = if (domesticType == "DoU") domesticIp else domesticAddress
+
+            val proxyDomains = JSONArray()
+            siteLists["proxy"].orEmpty().filter { isDomainRoutingEntry(it) }.forEach { proxyDomains.put(it) }
+            val directDomains = JSONArray()
+            siteLists["direct"].orEmpty().filter { isDomainRoutingEntry(it) }.forEach { directDomains.put(it) }
+
+            if (routingPreferences.getBoolean("site_fake_dns", false)) {
+                dnsServers.put("fakedns")
+                config.put("fakedns", JSONArray().put(
+                    JSONObject().put("ipPool", "198.18.0.0/15").put("poolSize", 65535)
+                ))
+            }
+            if (proxyDnsAddress.isNotBlank()) {
+                val proxyDns = JSONObject().put("address", proxyDnsAddress)
+                if (proxyDomains.length() > 0) proxyDns.put("domains", proxyDomains)
+                proxyDns.put("skipFallback", proxyDomains.length() > 0)
+                dnsServers.put(proxyDns)
+            }
+            if (directDnsAddress.isNotBlank()) {
+                val directDns = JSONObject().put("address", directDnsAddress)
+                if (directDomains.length() > 0) directDns.put("domains", directDomains)
+                directDns.put("skipFallback", directDomains.length() > 0)
+                dnsServers.put(directDns)
+            }
+            // A general fallback is retained even when no explicit site list matches.
+            if (proxyDnsAddress.isNotBlank()) dnsServers.put(proxyDnsAddress)
+
+            val dns = JSONObject().put("servers", dnsServers)
+            val hosts = JSONObject()
+            routingPreferences.getString("site_dns_hosts", "").orEmpty().lineSequence()
+                .map { it.substringBefore("#").trim() }
+                .filter { it.isNotBlank() }
+                .forEach { line ->
+                    val parts = line.split(Regex("\\s*=\\s*|\\s+"), limit = 2)
+                    if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
+                        hosts.put(parts[0].trim(), parts[1].trim())
+                    }
+                }
+            if (hosts.length() > 0) dns.put("hosts", hosts)
+            config.put("dns", dns)
         }
         return config.toString()
     }
+
+    private fun readRoutingEntries(prefs: android.content.SharedPreferences, key: String): List<String> =
+        prefs.getString(key, "").orEmpty().lineSequence()
+            .map { it.substringBefore("#").trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+
+    private fun isDomainRoutingEntry(entry: String): Boolean =
+        entry.startsWith("geosite:", true) ||
+            entry.startsWith("domain:", true) ||
+            entry.startsWith("full:", true) ||
+            entry.startsWith("regexp:", true) ||
+            (!entry.startsWith("geoip:", true) &&
+                !entry.matches(Regex("""^(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?$""")) &&
+                !entry.contains(":"))
 
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
