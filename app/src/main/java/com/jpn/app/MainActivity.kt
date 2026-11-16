@@ -1022,10 +1022,17 @@ class MainActivity : Activity() {
             override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
                 val row = super.getView(position, convertView, parent) as TextView
                 row.paintFlags = row.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
-                row.setBackgroundColor(
-                    if (position == selectedNodeIndex) 0xFFD8F5D0.toInt()
-                    else android.graphics.Color.TRANSPARENT
-                )
+                row.setPadding(dp(12), dp(9), dp(12), dp(9))
+                if (position == selectedNodeIndex) {
+                    row.setTextColor(android.graphics.Color.WHITE)
+                    row.background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(0xFF34343A.toInt())
+                        cornerRadius = dp(8).toFloat()
+                    }
+                } else {
+                    row.setTextColor(0xFF202124.toInt())
+                    row.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+                }
                 return row
             }
         }
