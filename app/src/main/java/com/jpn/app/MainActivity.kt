@@ -103,6 +103,7 @@ class MainActivity : Activity() {
     private val nodes = mutableListOf<JSONObject>()
     private var selectedNodeIndex = -1
     @Volatile private var downloadedSubscriptionName: String? = null
+    @Volatile private var rawProfileTitle: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -484,7 +485,9 @@ class MainActivity : Activity() {
                     } else {
                         "В подписке не найдено поддерживаемых серверов с защитой TLS/REALITY"
                     }
-                    setStatus(diagnostic)
+                    val rawTitle = rawProfileTitle
+                    val titleCodes = rawTitle?.map { "U+%04X".format(it.code) }?.joinToString(" ") ?: "(нет)"
+                    setStatus("$diagnostic; profile-title raw=${rawTitle ?: "(отсутствует)"}; коды=$titleCodes")
                 }
             } catch (error: Exception) {
                 mainHandler.post {
@@ -523,7 +526,9 @@ class MainActivity : Activity() {
                     output.write(buffer, 0, count)
                 }
             }
-            val profileTitle = connection.getHeaderField("profile-title")
+            val profileTitleHeader = connection.getHeaderField("profile-title")
+            rawProfileTitle = profileTitleHeader
+            val profileTitle = profileTitleHeader
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
             downloadedSubscriptionName = profileTitle?.let { decodeProfileTitle(it) }
