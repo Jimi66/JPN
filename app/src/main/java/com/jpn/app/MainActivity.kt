@@ -359,7 +359,7 @@ class MainActivity : Activity() {
             setTextColor(android.graphics.Color.WHITE)
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(0xFF258A45.toInt())
+                setColor(0xFFE1E3F7.toInt())
             }
             setOnClickListener { anchor ->
                 android.widget.PopupMenu(this@MainActivity, anchor).apply {
