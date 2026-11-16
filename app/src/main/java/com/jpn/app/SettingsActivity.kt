@@ -53,6 +53,18 @@ class SettingsActivity : Activity() {
                 setColor(0xFFF4F5F6.toInt())
                 cornerRadius = dp(14).toFloat()
             }
+            // Keep the rounded card background and show a clipped ripple on press.
+            foreground = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x26000000),
+                null,
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = dp(14).toFloat()
+                    setColor(android.graphics.Color.WHITE)
+                }
+            )
+            isClickable = true
+            isFocusable = true
             setOnClickListener {
                 startActivity(Intent(this@SettingsActivity, AppRoutingActivity::class.java))
             }
