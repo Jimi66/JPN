@@ -203,9 +203,8 @@ class MainActivity : Activity() {
                 cornerRadius = dp(34).toFloat()
             }
             elevation = dp(12).toFloat()
-            val ripple = android.util.TypedValue()
-            theme.resolveAttribute(android.R.attr.selectableItemBackground, ripple, true)
-            foreground = getDrawable(ripple.resourceId)
+            foreground = null
+            stateListAnimator = null
             setOnClickListener {
                 pendingSelectedOutbound = null
                 pendingSelectedName = null
