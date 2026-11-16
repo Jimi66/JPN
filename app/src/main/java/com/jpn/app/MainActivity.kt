@@ -1049,17 +1049,39 @@ class MainActivity : Activity() {
                     try {
                         val outbound = resolveOutboundForCheck(savedNode)
                         val config = buildXrayConfig(outbound)
-                        val delay = LibXray.measureOutboundDelayWithType(
-                            config,
-                            "https://www.gstatic.com/generate_204",
-                            "GET",
-                            "default",
-                            7000L
-                        )
-                        if (delay >= 0L) {
-                            result = delay.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        val request = JSONObject()
+                            .put("apiVersion", 3)
+                            .put("method", "pingBatch")
+                            .put(
+                                "payload",
+                                JSONObject()
+                                    .put(
+                                        "configs",
+                                        JSONArray().put(
+                                            JSONObject()
+                                                .put("xrayJson", config)
+                                                .put("outboundTag", outbound.optString("tag"))
+                                        )
+                                    )
+                                    .put("timeout", 7)
+                                    .put("url", "https://www.gstatic.com/generate_204")
+                            )
+                        val response = JSONObject(LibXray.invoke(request.toString()))
+                        if (!response.optBoolean("success", false)) {
+                            throw IllegalStateException(
+                                response.optString("error").ifBlank { "Ошибка проверки Xray" }
+                            )
+                        }
+                        val pingResult = response.optJSONObject("data")
+                            ?.optJSONArray("results")
+                            ?.optJSONObject(0)
+                            ?: throw IllegalStateException("Xray не вернул результат проверки")
+                        if (pingResult.optBoolean("success", false)) {
+                            result = pingResult.optLong("delay").coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                         } else {
-                            throw IllegalStateException("Xray не получил ответ от сервера")
+                            throw IllegalStateException(
+                                pingResult.optString("error").ifBlank { "Сервер не ответил" }
+                            )
                         }
                     } catch (error: Exception) {
                         failure = generateSequence(error as Throwable?) { it.cause }
