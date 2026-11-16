@@ -25,15 +25,17 @@ class XrayVpnService : VpnService() {
         const val ACTION_START = "com.jpn.app.vpn.START"
         const val ACTION_STOP = "com.jpn.app.vpn.STOP"
         const val EXTRA_XRAY_JSON = "xray_json"
+        const val EXTRA_TEST_MODE = "test_mode"
         const val ACTION_STATE_CHANGED = "com.jpn.app.vpn.STATE_CHANGED"
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
 
-        fun start(context: Context, xrayJson: String) {
+        fun start(context: Context, xrayJson: String, testMode: Boolean = false) {
             val intent = Intent(context, XrayVpnService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_XRAY_JSON, xrayJson)
+                putExtra(EXTRA_TEST_MODE, testMode)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -42,15 +44,17 @@ class XrayVpnService : VpnService() {
             }
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context, testMode: Boolean = false) {
             context.startService(Intent(context, XrayVpnService::class.java).apply {
                 action = ACTION_STOP
+                putExtra(EXTRA_TEST_MODE, testMode)
             })
         }
     }
 
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
     private var coreStarted = false
+    private var testMode = false
 
     private val socketController = object : DialerController {
         // gomobile exposes Go's int as Java/Kotlin Long.
@@ -62,13 +66,16 @@ class XrayVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                testMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false) || testMode
                 stopCoreAndTunnel()
-                publishState("disconnected", "VPN отключён")
+                publishState("disconnected", if (testMode) "Тестовое подключение отключено" else "VPN отключён", testMode)
+                testMode = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_START -> {
+                testMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false)
                 val config = intent.getStringExtra(EXTRA_XRAY_JSON)
                 if (config.isNullOrBlank()) {
                     stopSelf(startId)
@@ -80,7 +87,7 @@ class XrayVpnService : VpnService() {
                     startCoreAndTunnel(config)
                 } catch (error: Exception) {
                     stopCoreAndTunnel()
-                    publishState("error", error.message ?: "Не удалось запустить Xray")
+                    publishState("error", error.message ?: "Не удалось запустить Xray", testMode)
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf(startId)
                 }
@@ -101,7 +108,10 @@ class XrayVpnService : VpnService() {
             .addAddress("fdfe:dcba:9876::1", 126)
             .addRoute("::", 0)
 
-        // Apply per-app routing before establishing the Android VPN interface.
+        // A temporary check routes only JPN itself through the test tunnel.
+        if (testMode) builder.addAllowedApplication(packageName)
+
+        // Apply the user routing rules only for regular VPN sessions.
         val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
         val routingEnabled = routingPreferences.getBoolean("routing_enabled", true)
         val routingMode = routingPreferences.getString("routing_mode", "exclude")
@@ -109,7 +119,7 @@ class XrayVpnService : VpnService() {
             .getStringSet("routing_packages", emptySet())
             ?.toSet()
             ?: emptySet()
-        if (routingEnabled && routingMode == "selected") {
+        if (!testMode && routingEnabled && routingMode == "selected") {
             var atLeastOneAllowed = false
             selectedPackages.forEach { appPackage ->
                 if (runCatching { builder.addAllowedApplication(appPackage) }.isSuccess) {
@@ -120,7 +130,7 @@ class XrayVpnService : VpnService() {
             // Restrict it to JPN itself instead, so "only selected" + no selection
             // does not unexpectedly turn into full-device routing.
             if (!atLeastOneAllowed) builder.addAllowedApplication(packageName)
-        } else if (routingEnabled) {
+        } else if (!testMode && routingEnabled) {
             selectedPackages.forEach { appPackage ->
                 runCatching { builder.addDisallowedApplication(appPackage) }
             }
@@ -167,7 +177,7 @@ class XrayVpnService : VpnService() {
             throw IllegalStateException(response.optString("error", "Xray failed to start"))
         }
         coreStarted = true
-        publishState("connected", "VPN подключён")
+        publishState("connected", if (testMode) "Тестовый туннель подключён" else "VPN подключён", testMode)
     }
 
     private fun stopCoreAndTunnel() {
@@ -199,17 +209,20 @@ class XrayVpnService : VpnService() {
     }
 
 
-    private fun publishState(state: String, message: String) {
-        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putString("vpn_state", state)
-            .putString("vpn_message", message)
-            .apply()
+    private fun publishState(state: String, message: String, isTestMode: Boolean = testMode) {
+        if (!isTestMode) {
+            getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putString("vpn_state", state)
+                .putString("vpn_message", message)
+                .apply()
+        }
         sendBroadcast(
             Intent(ACTION_STATE_CHANGED)
                 .setPackage(packageName)
                 .putExtra("state", state)
                 .putExtra("message", message)
+                .putExtra(EXTRA_TEST_MODE, isTestMode)
         )
     }
 
