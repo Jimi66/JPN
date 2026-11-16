@@ -131,8 +131,8 @@ class AppRoutingActivity : Activity() {
             text = "Только выбранные приложения через VPN"
             textSize = 14f
         }
-        modeGroup.addView(excludeMode)
         modeGroup.addView(selectedMode)
+        modeGroup.addView(excludeMode)
         modeGroup.check(
             if (preferences.getString(KEY_ROUTING_MODE, MODE_EXCLUDE) == MODE_SELECTED) 2 else 1
         )
