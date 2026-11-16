@@ -128,10 +128,6 @@ class SiteRoutingActivity : Activity() {
         body.addView(tabs, matchWidth())
         rulesContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         body.addView(rulesContainer, matchWidth())
-        body.addView(Button(this).apply {
-            text = "+ Добавить правило"; isAllCaps = false
-            setOnClickListener { showRuleEditor(selectedRuleTab, null, -1) }
-        }, matchWidth())
         body.addView(TextView(this).apply {
             text = "Поддерживаются domain:, full:, regexp:, geosite:, geoip: и IP/CIDR."
             textSize = 12f; setTextColor(0xFF777777.toInt()); setPadding(dp(2), dp(5), dp(2), dp(12))
@@ -225,6 +221,10 @@ class SiteRoutingActivity : Activity() {
             })
             rulesContainer.addView(row, matchWidth())
         }
+        rulesContainer.addView(Button(this).apply {
+            text = "+ Добавить"; isAllCaps = false
+            setOnClickListener { showRuleEditor(selectedRuleTab, key, -1) }
+        }, matchWidth())
     }
 
     private fun showRuleEditor(tab: String, key: String?, index: Int, current: String? = null) {
