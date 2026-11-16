@@ -153,19 +153,27 @@ class XrayVpnService : VpnService() {
         val inbounds = config.optJSONArray("inbounds") ?: JSONArray().also {
             config.put("inbounds", it)
         }
-        inbounds.put(
-            JSONObject()
-                .put("tag", "jpn-tun-in")
-                .put("port", 0)
-                .put("protocol", "tun")
-                .put(
-                    "settings",
-                    JSONObject()
-                        // Android assigns the interface name when Builder.establish() is called.
-                        .put("name", "jpn-tun")
-                        .put("mtu", 1500)
-                )
-        )
+        val tunInbound = JSONObject()
+            .put("tag", "jpn-tun-in")
+            .put("port", 0)
+            .put("protocol", "tun")
+            .put(
+                "settings",
+                JSONObject()
+                    // Android assigns the interface name when Builder.establish() is called.
+                    .put("name", "jpn-tun")
+                    .put("mtu", 1500)
+            )
+        if (config.has("fakedns")) {
+            tunInbound.put(
+                "sniffing",
+                JSONObject()
+                    .put("enabled", true)
+                    .put("destOverride", JSONArray().put("fakedns"))
+                    .put("metadataOnly", false)
+            )
+        }
+        inbounds.put(tunInbound)
 
         val request = JSONObject()
             .put("apiVersion", 3)
