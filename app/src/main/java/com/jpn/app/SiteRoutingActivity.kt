@@ -80,13 +80,21 @@ class SiteRoutingActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(8))
         }
-        root.addView(TextView(this).apply {
-            text = "‹   Назад"; textSize = 18f; setTextColor(0xFF514B83.toInt())
-            setPadding(dp(4), dp(8), dp(4), dp(12)); setOnClickListener { finish() }
-        })
-        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         titleRow.addView(TextView(this).apply {
-            text = "Маршрутизация сайтов"; textSize = 21f
+            text = "‹ Назад"
+            textSize = 15f
+            setTextColor(0xFF514B83.toInt())
+            setPadding(dp(2), dp(12), dp(10), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(-2, -2))
+        titleRow.addView(TextView(this).apply {
+            text = "Маршрутизация сайтов"; textSize = 20f
             setTypeface(typeface, Typeface.BOLD); setTextColor(0xFF202124.toInt())
         }, LinearLayout.LayoutParams(0, -2, 1f))
         enabledSwitch = Switch(this).apply {
@@ -152,10 +160,18 @@ class SiteRoutingActivity : Activity() {
         sectionTitle(body, "Дополнительно")
         fakeDnsSwitch = addSwitch(body, "Fake DNS", KEY_FAKE_DNS, false)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(Button(this).apply {
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+            setBackgroundColor(0xFFFFFFFF.toInt())
+        }
+        footer.addView(Button(this).apply {
             text = "Сохранить и вернуться"
+            minHeight = dp(48)
             setOnClickListener { saveSettings(); finish() }
         }, matchWidth())
+        root.addView(footer, matchWidth())
+        root.fitsSystemWindows = true
         setContentView(root)
     }
 
