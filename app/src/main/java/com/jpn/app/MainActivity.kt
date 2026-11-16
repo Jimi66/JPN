@@ -284,6 +284,7 @@ class MainActivity : Activity() {
                         cornerRadius = dp(12).toFloat()
                     }
                 }
+                lateinit var popupWindow: android.widget.PopupWindow
                 val deleteRow = TextView(this@MainActivity).apply {
                     text = "Удалить подписку"
                     textSize = 14f
