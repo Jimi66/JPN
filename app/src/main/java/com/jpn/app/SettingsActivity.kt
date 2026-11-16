@@ -6,15 +6,9 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
-import android.widget.Switch
 import android.widget.TextView
 
 class SettingsActivity : Activity() {
-
-    companion object {
-        private const val PREFS = "jpn_settings"
-        private const val KEY_ROUTING_ENABLED = "routing_enabled"
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,19 +74,6 @@ class SettingsActivity : Activity() {
             setTextColor(0xFF202124.toInt())
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-        val routingSwitch = Switch(this).apply {
-            isChecked = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getBoolean(KEY_ROUTING_ENABLED, false)
-            contentDescription = "Маршрутизация приложений включена"
-            setOnCheckedChangeListener { _, checked ->
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putBoolean(KEY_ROUTING_ENABLED, checked)
-                    .apply()
-            }
-        }
-        routing.addView(routingSwitch, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ))
         root.addView(routing, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
