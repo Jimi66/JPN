@@ -1401,6 +1401,17 @@ class MainActivity : Activity() {
                     .put("rules", rules))
             }
 
+            // Redirect Android DNS packets from the TUN into Xray's DNS module.
+            outbounds.put(JSONObject()
+                .put("tag", "jpn-dns")
+                .put("protocol", "dns")
+                .put("settings", JSONObject().put("rules", JSONArray().put(JSONObject().put("action", "hijack")))))
+            rules.put(0, JSONObject()
+                .put("type", "field")
+                .put("inboundTag", JSONArray().put("jpn-tun-in"))
+                .put("port", "53")
+                .put("outboundTag", "jpn-dns"))
+
             val dnsServers = JSONArray()
             val remoteType = routingPreferences.getString("site_remote_dns_type", "DoH")
             val domesticType = routingPreferences.getString("site_domestic_dns_type", "DoH")
