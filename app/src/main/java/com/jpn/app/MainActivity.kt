@@ -266,7 +266,8 @@ class MainActivity : Activity() {
             }
         }
         val refreshSubscriptionButton = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_popup_sync)
+            setImageResource(R.drawable.jpn_subscription_refresh)
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             contentDescription = "Обновить подписку"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
