@@ -1082,7 +1082,7 @@ class MainActivity : Activity() {
             val latency = node.optInt("jpnPingMs", -1)
             when {
                 latency >= 0 -> "$name · $latency мс"
-                node.optBoolean("jpnPingFailed", false) -> "$name · недоступен"
+                node.optBoolean("jpnPingFailed", false) -> "$name · ∞"
                 node.optBoolean("jpnNeedsValidation", false) -> "$name · не проверен"
                 else -> name
             }
