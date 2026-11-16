@@ -257,6 +257,10 @@ class MainActivity : Activity() {
             theme.resolveAttribute(android.R.attr.selectableItemBackground, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
+            setOnLongClickListener {
+                android.widget.Toast.makeText(this@MainActivity, "Редактирование подписки — меню управления маршрутизацией и удаления подписки", android.widget.Toast.LENGTH_SHORT).show()
+                true
+            }
             setOnClickListener { anchor ->
                 android.widget.PopupMenu(this@MainActivity, anchor).apply {
                     menu.add("Маршрутизация приложений").setOnMenuItemClickListener {
@@ -278,6 +282,10 @@ class MainActivity : Activity() {
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
+            setOnLongClickListener {
+                android.widget.Toast.makeText(this@MainActivity, "Обновление подписки — загрузить актуальный список серверов по сохранённой ссылке", android.widget.Toast.LENGTH_SHORT).show()
+                true
+            }
             setOnClickListener {
                 val savedUrl = preferences.getString(KEY_SUBSCRIPTION_URL, null)
                 if (savedUrl.isNullOrBlank()) {
@@ -297,8 +305,13 @@ class MainActivity : Activity() {
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
-            isEnabled = false
+            isEnabled = true
+            isClickable = false
             alpha = 0.55f
+            setOnLongClickListener {
+                android.widget.Toast.makeText(this@MainActivity, "Проверка серверов — функция пока не активна", android.widget.Toast.LENGTH_SHORT).show()
+                true
+            }
         }
         val nodesHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
