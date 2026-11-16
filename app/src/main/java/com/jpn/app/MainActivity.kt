@@ -279,7 +279,7 @@ class MainActivity : Activity() {
             }
         }
         val pingButton = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_compass)
+            setImageResource(R.drawable.jpn_ping_speedometer)
             contentDescription = "Ping"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
