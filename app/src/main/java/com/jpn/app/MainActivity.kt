@@ -169,6 +169,25 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        applyPendingSiteRoutingRestart()
+    }
+
+    private fun applyPendingSiteRoutingRestart() {
+        if (!preferences.getBoolean("site_routing_restart_pending", false)) return
+        preferences.edit().remove("site_routing_restart_pending").apply()
+        if (!isVpnRunning()) return
+
+        if (selectedNodeIndex !in nodes.indices) {
+            selectedNodeIndex = preferences.getInt(KEY_SELECTED_NODE_INDEX, -1)
+        }
+        val selected = nodes.getOrNull(selectedNodeIndex)
+        if (selected == null) {
+            setStatus("Не удалось автоматически применить маршрутизацию: выбранный сервер не найден")
+            return
+        }
+        val name = selected.optString("tag").ifBlank { "Сервер ${selectedNodeIndex + 1}" }
+        setStatus("Применяю правила маршрутизации сайтов…")
+        connectToOutbound(selected, name)
     }
 
     private fun buildScreen() {
