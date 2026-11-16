@@ -82,7 +82,7 @@ class SettingsActivity : Activity() {
 
         val routingSwitch = Switch(this).apply {
             isChecked = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getBoolean(KEY_ROUTING_ENABLED, true)
+                .getBoolean(KEY_ROUTING_ENABLED, false)
             contentDescription = "Маршрутизация приложений включена"
             setOnCheckedChangeListener { _, checked ->
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
