@@ -1143,34 +1143,65 @@ class MainActivity : Activity() {
         }
 
         selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
-        val labels = nodes.mapIndexed { index, node ->
-            val name = node.optString("tag").ifBlank { "Сервер ${index + 1}" }
-            val latency = node.optInt("jpnPingMs", -1)
-            when {
-                latency >= 0 -> "$name · $latency мс"
-                node.optBoolean("jpnPingFailed", false) -> "$name · ∞"
-                node.optBoolean("jpnNeedsValidation", false) -> "$name · не проверен"
-                else -> name
-            }
-        }
-        nodesContainer.adapter = object : ArrayAdapter<String>(
-            this,
-            android.R.layout.simple_list_item_1,
-            labels
-        ) {
+        nodesContainer.adapter = object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = nodes.size
+            override fun getItem(position: Int): JSONObject = nodes[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+
             override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-                val row = super.getView(position, convertView, parent) as TextView
-                row.paintFlags = row.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
-                row.setPadding(dp(12), dp(9), dp(12), dp(9))
+                val row = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(12), dp(9), dp(16), dp(9))
+                    minimumHeight = dp(44)
+
+                    addView(TextView(this@MainActivity).apply {
+                        tag = "server_name"
+                        textSize = 16f
+                        setTextColor(0xFF202124.toInt())
+                        gravity = Gravity.CENTER_VERTICAL
+                    }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+                    addView(TextView(this@MainActivity).apply {
+                        tag = "server_latency"
+                        textSize = 14f
+                        setTextColor(0xFF60646A.toInt())
+                        gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                        setPadding(dp(12), 0, 0, 0)
+                    }, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ))
+                }
+
+                val node = nodes[position]
+                val name = node.optString("tag").ifBlank { "Сервер ${position + 1}" }
+                val latency = node.optInt("jpnPingMs", -1)
+                val latencyText = when {
+                    latency >= 0 -> "$latency мс"
+                    node.optBoolean("jpnPingFailed", false) -> "∞"
+                    node.optBoolean("jpnNeedsValidation", false) -> "не проверен"
+                    else -> ""
+                }
+
+                row.findViewWithTag<TextView>("server_name").text = name
+                row.findViewWithTag<TextView>("server_latency").apply {
+                    text = latencyText
+                    visibility = if (latencyText.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+                }
+
                 if (position == selectedNodeIndex) {
-                    row.setTextColor(android.graphics.Color.WHITE)
+                    row.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     row.background = android.graphics.drawable.GradientDrawable().apply {
                         setColor(0xFF34343A.toInt())
                         cornerRadius = dp(8).toFloat()
                     }
+                    row.findViewWithTag<TextView>("server_name").setTextColor(android.graphics.Color.WHITE)
+                    row.findViewWithTag<TextView>("server_latency").setTextColor(0xFFE0E0E0.toInt())
                 } else {
-                    row.setTextColor(0xFF202124.toInt())
                     row.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+                    row.findViewWithTag<TextView>("server_name").setTextColor(0xFF202124.toInt())
+                    row.findViewWithTag<TextView>("server_latency").setTextColor(0xFF60646A.toInt())
                 }
                 return row
             }
