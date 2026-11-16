@@ -387,7 +387,7 @@ class MainActivity : Activity() {
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
             background = getDrawable(selectableBackground.resourceId)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
