@@ -107,6 +107,10 @@ class MainActivity : Activity() {
     private var selectedNodeIndex = -1
     private var lastHapticVpnState: String? = null
     private var pingCheckRunning = false
+    private var pingWaitingForVpnStop = false
+    private var pingRestoreVpn = false
+    private var pingSuppressHaptics = false
+    private var pingButtonForCheck: ImageButton? = null
     @Volatile private var lastTestVpnError: String? = null
     @Volatile private var testVpnStopCompleted = false
     @Volatile private var downloadedSubscriptionName: String? = null
@@ -126,6 +130,15 @@ class MainActivity : Activity() {
             }
             val message = intent.getStringExtra("message") ?: state
             showState(state, message)
+            if (pingRestoreVpn && (state == "connected" || state == "error")) {
+                pingRestoreVpn = false
+                pingSuppressHaptics = false
+            }
+            if (state == "disconnected" && pingWaitingForVpnStop) {
+                pingWaitingForVpnStop = false
+                pingCheckRunning = false
+                mainHandler.postDelayed({ checkServersLatency(pingButtonForCheck) }, 250)
+            }
             if (state == "disconnected" && pendingSelectedOutbound != null) {
                 val outbound = pendingSelectedOutbound
                 val name = pendingSelectedName ?: "Выбранный сервер"
@@ -1012,10 +1025,22 @@ class MainActivity : Activity() {
         }
 
         pingCheckRunning = true
+        pingButtonForCheck = button
         button?.isEnabled = false
         button?.alpha = 0.45f
         vpnButton.isEnabled = false
         nodesContainer.isEnabled = false
+
+        // libXray pingBatch refuses to run while the regular VPN core is alive.
+        // Stop the tunnel, perform checks in isolation, then restore the same server.
+        if (isVpnRunning()) {
+            pingRestoreVpn = true
+            pingSuppressHaptics = true
+            pingWaitingForVpnStop = true
+            setStatus("Временно отключаю VPN для проверки серверов…")
+            XrayVpnService.stop(this)
+            return
+        }
 
         val snapshot = nodes.map { JSONObject(it.toString()) }
         setStatus("Подготавливаю проверку серверов…")
@@ -1097,7 +1122,22 @@ class MainActivity : Activity() {
                     vpnButton.isEnabled = true
                     nodesContainer.isEnabled = true
                     val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
-                    setStatus("Проверка завершена: доступно $available из ${nodes.size}")
+                    if (pingRestoreVpn) {
+                        val restoreIndex = selectedNodeIndex.takeIf { it in nodes.indices }
+                            ?: preferences.getInt(KEY_SELECTED_NODE_INDEX, -1)
+                        val selected = nodes.getOrNull(restoreIndex)
+                        if (selected != null) {
+                            val name = selected.optString("tag").ifBlank { "Сервер ${restoreIndex + 1}" }
+                            setStatus("Проверка завершена: доступно $available из ${nodes.size}. Восстанавливаю VPN…")
+                            connectToOutbound(selected, name)
+                        } else {
+                            pingRestoreVpn = false
+                            pingSuppressHaptics = false
+                            setStatus("Проверка завершена: доступно $available из ${nodes.size}. Не удалось восстановить VPN: сервер не выбран")
+                        }
+                    } else {
+                        setStatus("Проверка завершена: доступно $available из ${nodes.size}")
+                    }
                 }
             }
         }.start()
@@ -1467,7 +1507,8 @@ class MainActivity : Activity() {
 
         // Vibrate only after a real stable-state transition. Ignore the
         // temporary disconnect while switching between servers.
-        if ((state == "connected" || state == "disconnected") &&
+        if (!pingSuppressHaptics &&
+            (state == "connected" || state == "disconnected") &&
             state != lastHapticVpnState && pendingSelectedOutbound == null
         ) {
             vibrateForVpnTransition()
