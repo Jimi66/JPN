@@ -284,36 +284,6 @@ class MainActivity : Activity() {
                         cornerRadius = dp(12).toFloat()
                     }
                 }
-                val routingRow = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(8), dp(4), dp(8), dp(4))
-                }
-                lateinit var popupWindow: android.widget.PopupWindow
-                val routingLabel = TextView(this@MainActivity).apply {
-                    text = "Маршрутизация приложений"
-                    textSize = 14f
-                    setTextColor(0xFF202124.toInt())
-                    setPadding(0, dp(12), dp(8), dp(12))
-                    minHeight = dp(48)
-                    // All settings/menu rows use the platform ripple feedback.
-                    background = selectableItemBackground()
-                    isClickable = true
-                    isFocusable = true
-                    setOnClickListener {
-                        popupWindow.dismiss()
-                        startActivity(Intent(this@MainActivity, AppRoutingActivity::class.java))
-                    }
-                }
-                val routingSwitch = android.widget.Switch(this@MainActivity).apply {
-                    isChecked = preferences.getBoolean("routing_enabled", true)
-                    setOnCheckedChangeListener { _, checked ->
-                        preferences.edit().putBoolean("routing_enabled", checked).apply()
-                    }
-                }
-                routingRow.addView(routingLabel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                routingRow.addView(routingSwitch)
-                popupContent.addView(routingRow)
                 val deleteRow = TextView(this@MainActivity).apply {
                     text = "Удалить подписку"
                     textSize = 14f
