@@ -115,10 +115,10 @@ class SiteRoutingActivity : Activity() {
         sectionTitle(body, "DNS")
         remoteTypeSpinner = addSpinner(body, "Remote DNS type", listOf("DoH", "DoU"), KEY_REMOTE_DNS_TYPE, "DoH")
         addSettingInput(body, "Remote DNS address", KEY_REMOTE_DNS, "https://cloudflare-dns.com/dns-query")
-        addSettingInput(body, "Remote DNS IP (для DoH / bootstrap)", KEY_REMOTE_DNS_IP, "1.1.1.1")
+        addSettingInput(body, "Remote DNS IP (для DoU)", KEY_REMOTE_DNS_IP, "1.1.1.1")
         domesticTypeSpinner = addSpinner(body, "Domestic DNS type", listOf("DoH", "DoU"), KEY_DOMESTIC_DNS_TYPE, "DoH")
         addSettingInput(body, "Domestic DNS address", KEY_DOMESTIC_DNS, "https://dns.google/dns-query")
-        addSettingInput(body, "Domestic DNS IP (для DoH / bootstrap)", KEY_DOMESTIC_DNS_IP, "8.8.8.8")
+        addSettingInput(body, "Domestic DNS IP (для DoU)", KEY_DOMESTIC_DNS_IP, "8.8.8.8")
         addSettingInput(body, "DNS Hosts — домен = IP, по одной записи на строку", KEY_DNS_HOSTS, "")
 
         sectionTitle(body, "Geo-базы Xray")
@@ -260,10 +260,16 @@ class SiteRoutingActivity : Activity() {
                     }
                 }
                 val target = File(filesDir, fileName)
-                if (!temp.renameTo(target)) {
-                    target.delete()
-                    if (!temp.renameTo(target)) throw IllegalStateException("Не удалось заменить файл")
+                val backup = File(filesDir, "$fileName.bak")
+                backup.delete()
+                if (target.exists() && !target.renameTo(backup)) {
+                    throw IllegalStateException("Не удалось сохранить предыдущую базу")
                 }
+                if (!temp.renameTo(target)) {
+                    if (backup.exists()) backup.renameTo(target)
+                    throw IllegalStateException("Не удалось заменить файл")
+                }
+                backup.delete()
                 runOnUiThread {
                     prefs.edit().putBoolean("site_routing_restart_pending", true).apply()
                     Toast.makeText(this, "$fileName загружен. База будет применена при переподключении VPN.", Toast.LENGTH_LONG).show()
