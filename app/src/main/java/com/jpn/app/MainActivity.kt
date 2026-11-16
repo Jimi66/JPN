@@ -103,7 +103,6 @@ class MainActivity : Activity() {
     private val nodes = mutableListOf<JSONObject>()
     private var selectedNodeIndex = -1
     @Volatile private var downloadedSubscriptionName: String? = null
-    @Volatile private var rawProfileTitle: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -462,7 +461,6 @@ class MainActivity : Activity() {
                 val subscriptionName = downloadedSubscriptionName
                     ?: runCatching { URL(subscriptionUrl).host }.getOrNull()?.takeIf { it.isNotBlank() }
                 val subscriptionText = decodeSubscriptionBody(body)
-                val sourceCount = countSubscriptionCandidates(subscriptionText)
                 val imported = parseSubscriptionEntries(subscriptionText)
                 mainHandler.post {
                     nodes.clear()
@@ -474,28 +472,7 @@ class MainActivity : Activity() {
                         .apply()
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
-                    val rejectedIndexes = findRejectedCandidateIndexes(subscriptionText)
-                    val acceptedForUse = nodes.count { !it.optBoolean("jpnNeedsValidation", false) }
-                    val rejected = (sourceCount - acceptedForUse).coerceAtLeast(0)
-                    val rejectedDetails = if (rejectedIndexes.isNotEmpty()) {
-                        "; требуют проверки: ${rejectedIndexes.joinToString("; ")}"
-                    } else {
-                        ""
-                    }
-                    val parameterDetails = describeSubscriptionCandidates(subscriptionText)
-                    val parameterSummary = if (parameterDetails.isNotEmpty()) {
-                        "; параметры VLESS: ${parameterDetails.joinToString("; ")}"
-                    } else {
-                        ""
-                    }
-                    val diagnostic = if (sourceCount > 0) {
-                        "Подписка обработана: найдено $sourceCount, добавлено защищённых TLS/REALITY серверов ${nodes.size}, пропущено $rejected$rejectedDetails$parameterSummary"
-                    } else {
-                        "В подписке не найдено поддерживаемых серверов с защитой TLS/REALITY"
-                    }
-                    val rawTitle = rawProfileTitle
-                    val titleCodes = rawTitle?.map { "U+%04X".format(it.code) }?.joinToString(" ") ?: "(нет)"
-                    setStatus("$diagnostic; profile-title raw=${rawTitle ?: "(отсутствует)"}; коды=$titleCodes")
+                    refreshVpnState()
                 }
             } catch (error: Exception) {
                 mainHandler.post {
@@ -535,7 +512,6 @@ class MainActivity : Activity() {
                 }
             }
             val profileTitleHeader = connection.getHeaderField("profile-title")
-            rawProfileTitle = profileTitleHeader
             val profileTitle = profileTitleHeader
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
