@@ -77,6 +77,7 @@ class MainActivity : Activity() {
         private const val PREFS = "jpn_settings"
 
         private const val KEY_SUBSCRIPTION_URL = "subscription_url"
+        private const val KEY_SUBSCRIPTION_NAME = "subscription_name"
         private const val KEY_SUBSCRIPTION_CONTENT = "subscription_content"
         private const val KEY_SAVED_NODES = "saved_nodes_json"
         private const val KEY_VPN_STATE = "vpn_state"
@@ -101,6 +102,7 @@ class MainActivity : Activity() {
     private var pendingSelectedName: String? = null
     private val nodes = mutableListOf<JSONObject>()
     private var selectedNodeIndex = -1
+    @Volatile private var downloadedSubscriptionName: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -419,6 +421,8 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val body = downloadSubscription(subscriptionUrl)
+                val subscriptionName = downloadedSubscriptionName
+                    ?: runCatching { URL(subscriptionUrl).host }.getOrNull()?.takeIf { it.isNotBlank() }
                 val subscriptionText = decodeSubscriptionBody(body)
                 val sourceCount = countSubscriptionCandidates(subscriptionText)
                 val imported = parseSubscriptionEntries(subscriptionText)
@@ -427,6 +431,7 @@ class MainActivity : Activity() {
                     nodes.addAll(imported)
                     preferences.edit()
                         .putString(KEY_SUBSCRIPTION_CONTENT, subscriptionText)
+                        .putString(KEY_SUBSCRIPTION_NAME, subscriptionName)
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     renderNodes()
@@ -488,6 +493,15 @@ class MainActivity : Activity() {
                     }
                     output.write(buffer, 0, count)
                 }
+            }
+            val profileTitle = connection.getHeaderField("profile-title")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            downloadedSubscriptionName = profileTitle?.let { raw ->
+                val decoded = runCatching {
+                    String(Base64.decode(raw, Base64.DEFAULT), StandardCharsets.UTF_8).trim()
+                }.getOrNull()
+                decoded?.takeIf { it.isNotBlank() } ?: raw
             }
             return String(output.toByteArray(), StandardCharsets.UTF_8)
         } finally {
@@ -881,7 +895,8 @@ class MainActivity : Activity() {
         nodesHeader.text = if (nodes.isEmpty()) {
             "Серверы не найдены"
         } else {
-            "Доступные серверы"
+            preferences.getString(KEY_SUBSCRIPTION_NAME, null)?.takeIf { it.isNotBlank() }
+                ?: "Подписка"
         }
 
         selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
