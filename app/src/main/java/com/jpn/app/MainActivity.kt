@@ -263,16 +263,55 @@ class MainActivity : Activity() {
                 true
             }
             setOnClickListener { anchor ->
-                android.widget.PopupMenu(this@MainActivity, anchor).apply {
-                    menu.add("Маршрутизация приложений").setOnMenuItemClickListener {
+                val popupContent = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(android.graphics.Color.WHITE)
+                        cornerRadius = dp(12).toFloat()
+                    }
+                }
+                val routingRow = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(8), dp(4), dp(8), dp(4))
+                }
+                val routingLabel = TextView(this@MainActivity).apply {
+                    text = "Маршрутизация приложений"
+                    textSize = 14f
+                    setTextColor(0xFF202124.toInt())
+                    setPadding(0, dp(8), dp(8), dp(8))
+                    setOnClickListener {
                         startActivity(Intent(this@MainActivity, AppRoutingActivity::class.java))
-                        true
                     }
-                    menu.add("Удалить подписку").setOnMenuItemClickListener {
+                }
+                val routingSwitch = android.widget.Switch(this@MainActivity).apply {
+                    isChecked = preferences.getBoolean("routing_enabled", true)
+                    setOnCheckedChangeListener { _, checked ->
+                        preferences.edit().putBoolean("routing_enabled", checked).apply()
+                    }
+                }
+                routingRow.addView(routingLabel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                routingRow.addView(routingSwitch)
+                popupContent.addView(routingRow)
+                val deleteRow = TextView(this@MainActivity).apply {
+                    text = "Удалить подписку"
+                    textSize = 14f
+                    setTextColor(0xFF202124.toInt())
+                    setPadding(dp(16), dp(12), dp(16), dp(12))
+                    setOnClickListener {
+                        popupWindow.dismiss()
                         confirmDeleteSubscription()
-                        true
                     }
-                }.show()
+                }
+                popupContent.addView(deleteRow)
+                val popupWindow = android.widget.PopupWindow(
+                    popupContent, dp(280), android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true
+                ).apply {
+                    elevation = dp(8).toFloat()
+                    setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                }
+                popupWindow.showAsDropDown(anchor)
             }
         }
         val refreshSubscriptionButton = ImageButton(this).apply {
