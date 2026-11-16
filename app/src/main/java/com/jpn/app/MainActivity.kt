@@ -108,13 +108,20 @@ class MainActivity : Activity() {
     private var lastHapticVpnState: String? = null
     private var pingCheckRunning = false
     @Volatile private var lastTestVpnError: String? = null
+    @Volatile private var testVpnStopCompleted = false
     @Volatile private var downloadedSubscriptionName: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val state = intent?.getStringExtra("state") ?: return
             if (intent.getBooleanExtra(XrayVpnService.EXTRA_TEST_MODE, false)) {
-                if (state == "error") lastTestVpnError = intent.getStringExtra("message") ?: "Неизвестная ошибка запуска Xray"
+                if (state == "error") {
+                    lastTestVpnError = intent.getStringExtra("message") ?: "Неизвестная ошибка запуска Xray"
+                    testVpnStopCompleted = true
+                } else if (state == "disconnected") {
+                    // This acknowledgement is sent after the service closes the TUN descriptor.
+                    testVpnStopCompleted = true
+                }
                 return
             }
             val message = intent.getStringExtra("message") ?: state
@@ -1035,9 +1042,10 @@ class MainActivity : Activity() {
             var restored = !originalWasRunning
             try {
                 if (originalWasRunning) {
+                    testVpnStopCompleted = false
                     XrayVpnService.stop(this, true)
-                    if (!waitForXrayState(false, 10000)) {
-                        throw IllegalStateException("Не удалось временно отключить VPN")
+                    if (!waitForTestVpnStop(10000)) {
+                        throw IllegalStateException("Служба VPN не подтвердила освобождение интерфейса")
                     }
                 }
 
@@ -1045,12 +1053,14 @@ class MainActivity : Activity() {
                     mainHandler.post { setStatus("Проверяю сервер ${index + 1} из ${snapshot.size}…") }
                     var result: Int? = null
                     var failure: String? = null
-                    var testStarted = false
+                    var testStartRequested = false
                     lastTestVpnError = null
+                    testVpnStopCompleted = false
                     try {
                         val outbound = resolveOutboundForCheck(savedNode)
                         val config = buildXrayConfig(outbound)
                         XrayVpnService.start(this, config, true)
+                        testStartRequested = true
                         if (!waitForXrayState(true, 15000)) {
                             val serviceError = lastTestVpnError
                             throw IllegalStateException(
@@ -1058,7 +1068,6 @@ class MainActivity : Activity() {
                                     ?: "Тестовый туннель не запустился за 15 секунд (getXrayState не подтвердил запуск)"
                             )
                         }
-                        testStarted = true
                         result = measureGoogleLatency()
                     } catch (error: Exception) {
                         failure = generateSequence(error as Throwable?) { it.cause }
@@ -1067,9 +1076,15 @@ class MainActivity : Activity() {
                                 "${cause.javaClass.simpleName}: ${cause.message ?: "без текста"}"
                             }
                     } finally {
-                        if (testStarted || isXrayCoreRunning()) {
+                        // Always send STOP, including when VPN establish or Xray startup failed.
+                        // The service acknowledgement confirms that the TUN descriptor was closed.
+                        if (testStartRequested || lastTestVpnError != null) {
+                            testVpnStopCompleted = false
                             XrayVpnService.stop(this, true)
-                            waitForXrayState(false, 10000)
+                            if (!waitForTestVpnStop(10000)) {
+                                val cleanupError = "Android не подтвердил освобождение VPN-интерфейса после проверки"
+                                failure = listOfNotNull(failure, cleanupError).joinToString(" → ")
+                            }
                         }
                     }
 
@@ -1101,8 +1116,9 @@ class MainActivity : Activity() {
                     }.getOrDefault(false)
                     restored = restoreResult
                 } else if (isXrayCoreRunning()) {
+                    testVpnStopCompleted = false
                     XrayVpnService.stop(this, true)
-                    waitForXrayState(false, 10000)
+                    waitForTestVpnStop(10000)
                 }
 
                 mainHandler.post {
@@ -1145,6 +1161,15 @@ class MainActivity : Activity() {
             val request = JSONObject().put("apiVersion", 3).put("method", "getXrayState")
             JSONObject(LibXray.invoke(request.toString())).opt("data") == true
         }.getOrDefault(false)
+    }
+
+    private fun waitForTestVpnStop(timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (testVpnStopCompleted) return true
+            Thread.sleep(100)
+        }
+        return testVpnStopCompleted
     }
 
     private fun waitForXrayState(expected: Boolean, timeoutMs: Long): Boolean {
