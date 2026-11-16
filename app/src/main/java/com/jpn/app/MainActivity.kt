@@ -166,7 +166,9 @@ class MainActivity : Activity() {
             textSize = 14f
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(4), dp(8), dp(12))
-            setTextIsSelectable(true)
+            setTextIsSelectable(false)
+            isClickable = false
+            isLongClickable = false
         }
 
         // The subscription field remains available to the existing import
