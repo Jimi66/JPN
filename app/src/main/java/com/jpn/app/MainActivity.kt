@@ -1017,8 +1017,8 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Checks each server by timing a TCP connection to its configured endpoint.
-     * This is a reachability/latency estimate, not an ICMP ping or VPN-tunnel RTT.
+     * Measures the selected Xray outbound directly through libXray.
+     * This follows Happ's proxy-delay check and does not create an Android VPN/TUN interface.
      */
     private fun checkServersLatency(button: ImageButton) {
         if (pingCheckRunning) return
@@ -1032,60 +1032,41 @@ class MainActivity : Activity() {
         button.alpha = 0.45f
         vpnButton.isEnabled = false
         nodesContainer.isEnabled = false
+
         val snapshot = nodes.map { JSONObject(it.toString()) }
-        val originalWasRunning = isVpnRunning()
-        val originalNode = nodes.getOrNull(selectedNodeIndex)?.let { JSONObject(it.toString()) }
         val failures = mutableListOf<String>()
-
         setStatus("Подготавливаю проверку серверов…")
-        Thread {
-            var restored = !originalWasRunning
-            try {
-                if (originalWasRunning) {
-                    testVpnStopCompleted = false
-                    XrayVpnService.stop(this, true)
-                    if (!waitForTestVpnStop(10000)) {
-                        throw IllegalStateException("Служба VPN не подтвердила освобождение интерфейса")
-                    }
-                }
 
+        Thread {
+            try {
                 snapshot.forEachIndexed { index, savedNode ->
-                    mainHandler.post { setStatus("Проверяю сервер ${index + 1} из ${snapshot.size}…") }
+                    mainHandler.post {
+                        setStatus("Проверяю сервер ${index + 1} из ${snapshot.size}…")
+                    }
+
                     var result: Int? = null
                     var failure: String? = null
-                    var testStartRequested = false
-                    lastTestVpnError = null
-                    testVpnStopCompleted = false
                     try {
                         val outbound = resolveOutboundForCheck(savedNode)
                         val config = buildXrayConfig(outbound)
-                        XrayVpnService.start(this, config, true)
-                        testStartRequested = true
-                        if (!waitForXrayState(true, 15000)) {
-                            val serviceError = lastTestVpnError
-                            throw IllegalStateException(
-                                serviceError?.let { "Xray не запустился: $it" }
-                                    ?: "Тестовый туннель не запустился за 15 секунд (getXrayState не подтвердил запуск)"
-                            )
+                        val delay = LibXray.measureOutboundDelayWithType(
+                            config,
+                            "https://www.gstatic.com/generate_204",
+                            "GET",
+                            "default",
+                            7000L
+                        )
+                        if (delay >= 0L) {
+                            result = delay.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        } else {
+                            throw IllegalStateException("Xray не получил ответ от сервера")
                         }
-                        result = measureGoogleLatency()
                     } catch (error: Exception) {
                         failure = generateSequence(error as Throwable?) { it.cause }
                             .take(5)
                             .joinToString(" → ") { cause ->
                                 "${cause.javaClass.simpleName}: ${cause.message ?: "без текста"}"
                             }
-                    } finally {
-                        // Always send STOP, including when VPN establish or Xray startup failed.
-                        // The service acknowledgement confirms that the TUN descriptor was closed.
-                        if (testStartRequested || lastTestVpnError != null) {
-                            testVpnStopCompleted = false
-                            XrayVpnService.stop(this, true)
-                            if (!waitForTestVpnStop(10000)) {
-                                val cleanupError = "Android не подтвердил освобождение VPN-интерфейса после проверки"
-                                failure = listOfNotNull(failure, cleanupError).joinToString(" → ")
-                            }
-                        }
                     }
 
                     mainHandler.post {
@@ -1105,22 +1086,7 @@ class MainActivity : Activity() {
                         }
                     }
                 }
-            } catch (error: Exception) {
-                failures.add("Общая ошибка проверки: ${error.javaClass.simpleName}: ${error.message ?: "без текста"}")
             } finally {
-                if (originalWasRunning && originalNode != null) {
-                    val restoreResult = runCatching {
-                        val outbound = resolveOutboundForCheck(originalNode)
-                        XrayVpnService.start(this, buildXrayConfig(outbound), false)
-                        waitForXrayState(true, 15000)
-                    }.getOrDefault(false)
-                    restored = restoreResult
-                } else if (isXrayCoreRunning()) {
-                    testVpnStopCompleted = false
-                    XrayVpnService.stop(this, true)
-                    waitForTestVpnStop(10000)
-                }
-
                 mainHandler.post {
                     pingCheckRunning = false
                     button.isEnabled = true
@@ -1128,14 +1094,7 @@ class MainActivity : Activity() {
                     vpnButton.isEnabled = true
                     nodesContainer.isEnabled = true
                     val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
-                    val summary = "Проверка завершена: доступно $available из ${nodes.size}"
-                    setStatus(
-                        when {
-                            originalWasRunning && restored -> "$summary. Прежнее VPN-подключение восстановлено"
-                            originalWasRunning -> "$summary. Не удалось восстановить прежнее VPN-подключение"
-                            else -> summary
-                        }
-                    )
+                    setStatus("Проверка завершена: доступно $available из ${nodes.size}")
                     if (failures.isNotEmpty()) {
                         android.app.AlertDialog.Builder(this)
                             .setTitle("Причины ошибок проверки")
@@ -1154,50 +1113,6 @@ class MainActivity : Activity() {
         val parsed = parseShareLinks(rawShareLink)
         if (parsed.length() == 0) throw IllegalArgumentException("Не удалось разобрать конфигурацию сервера")
         return JSONObject(parsed.getJSONObject(0).toString())
-    }
-
-    private fun isXrayCoreRunning(): Boolean {
-        return runCatching {
-            val request = JSONObject().put("apiVersion", 3).put("method", "getXrayState")
-            JSONObject(LibXray.invoke(request.toString())).opt("data") == true
-        }.getOrDefault(false)
-    }
-
-    private fun waitForTestVpnStop(timeoutMs: Long): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (testVpnStopCompleted) return true
-            Thread.sleep(100)
-        }
-        return testVpnStopCompleted
-    }
-
-    private fun waitForXrayState(expected: Boolean, timeoutMs: Long): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (isXrayCoreRunning() == expected) return true
-            Thread.sleep(200)
-        }
-        return isXrayCoreRunning() == expected
-    }
-
-    private fun measureGoogleLatency(): Int {
-        val started = System.nanoTime()
-        val connection = (URL("https://www.google.com/generate_204").openConnection() as HttpURLConnection)
-        connection.connectTimeout = 7000
-        connection.readTimeout = 7000
-        connection.requestMethod = "GET"
-        connection.instanceFollowRedirects = true
-        connection.setRequestProperty("Cache-Control", "no-cache")
-        try {
-            val responseCode = connection.responseCode
-            if (responseCode !in 200..399) {
-                throw IllegalStateException("Google вернул HTTP $responseCode")
-            }
-            return ((System.nanoTime() - started) / 1_000_000L).toInt().coerceAtLeast(1)
-        } finally {
-            connection.disconnect()
-        }
     }
 
     private fun renderNodes() {
