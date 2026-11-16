@@ -260,10 +260,28 @@ class MainActivity : Activity() {
                 }.show()
             }
         }
+        val refreshSubscriptionButton = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_popup_sync)
+            contentDescription = "Обновить подписку"
+            val selectableBackground = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
+            background = getDrawable(selectableBackground.resourceId)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setOnClickListener {
+                val savedUrl = preferences.getString(KEY_SUBSCRIPTION_URL, null)
+                if (savedUrl.isNullOrBlank()) {
+                    setStatus("Нет сохранённой ссылки на подписку")
+                } else {
+                    subscriptionInput.setText(savedUrl)
+                    loadSubscription()
+                }
+            }
+        }
         val nodesHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(nodesHeader, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(refreshSubscriptionButton, LinearLayout.LayoutParams(dp(36), dp(36)))
             addView(nodesMenuButton, LinearLayout.LayoutParams(dp(36), dp(36)))
         }
 
