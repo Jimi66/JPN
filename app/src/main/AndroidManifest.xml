@@ -9,6 +9,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@drawable/jpn"
+        android:roundIcon="@drawable/jpn"
         android:label="JPN"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
