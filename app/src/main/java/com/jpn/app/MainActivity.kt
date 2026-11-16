@@ -11,6 +11,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Base64
 import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
@@ -102,6 +105,7 @@ class MainActivity : Activity() {
     private var pendingSelectedName: String? = null
     private val nodes = mutableListOf<JSONObject>()
     private var selectedNodeIndex = -1
+    private var lastHapticVpnState: String? = null
     @Volatile private var downloadedSubscriptionName: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
@@ -121,6 +125,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
         restoreSavedSubscription()
         refreshVpnState()
@@ -1203,6 +1208,33 @@ class MainActivity : Activity() {
     private fun showState(state: String, message: String) {
         updateVpnButtonAppearance(state == "connected" || state == "connecting")
         setStatus(message)
+
+        // Vibrate only after a real stable-state transition. Ignore the
+        // temporary disconnect while switching between servers.
+        if ((state == "connected" || state == "disconnected") &&
+            state != lastHapticVpnState && pendingSelectedOutbound == null
+        ) {
+            vibrateForVpnTransition()
+            lastHapticVpnState = state
+        }
+    }
+
+    private fun vibrateForVpnTransition() {
+        runCatching {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                getSystemService(VibratorManager::class.java).defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            if (!vibrator.hasVibrator()) return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(65, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(65)
+            }
+        }
     }
 
     private fun updateVpnButtonAppearance(running: Boolean) {
