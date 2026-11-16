@@ -1289,41 +1289,40 @@ class MainActivity : Activity() {
 
         val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
         if (routingPreferences.getBoolean("site_routing_enabled", false)) {
-            val savedRules = runCatching {
-                JSONArray(routingPreferences.getString("site_routing_rules", "[]"))
-            }.getOrDefault(JSONArray())
             val rules = JSONArray()
             val proxyTag = selectedOutbound.optString("tag").ifBlank { "proxy" }
-
-            for (index in 0 until savedRules.length()) {
-                val savedRule = savedRules.optJSONObject(index) ?: continue
-                val value = savedRule.optString("value").trim()
-                if (value.isBlank()) continue
-
-                val actionTag = when (savedRule.optString("action")) {
-                    "direct" -> "jpn-direct"
-                    "block" -> "jpn-block"
-                    else -> proxyTag
-                }
-                val rule = JSONObject().put("type", "field")
-                if (savedRule.optString("type") == "ip") {
-                    rule.put("ip", JSONArray().put(value))
-                } else {
-                    val domainValue = when {
-                        value.startsWith("domain:") || value.startsWith("full:") ||
-                            value.startsWith("regexp:") || value.startsWith("geosite:") -> value
-                        else -> "domain:$value"
+            val sections = listOf(
+                "block" to "jpn-block",
+                "direct" to "jpn-direct",
+                "proxy" to proxyTag
+            )
+            for ((section, outboundTag) in sections) {
+                val raw = routingPreferences.getString("site_${section}_rules", "").orEmpty()
+                val domains = JSONArray()
+                val ips = JSONArray()
+                raw.lineSequence().map { it.substringBefore("#").trim() }
+                    .filter { it.isNotBlank() }
+                    .forEach { entry ->
+                        when {
+                            entry.startsWith("geoip:", true) -> ips.put(entry)
+                            entry.startsWith("geosite:", true) ||
+                                entry.startsWith("domain:", true) ||
+                                entry.startsWith("full:", true) ||
+                                entry.startsWith("regexp:", true) -> domains.put(entry)
+                            entry.matches(Regex("^(?:\\\\d{1,3}\\\\.){3}\\\\d{1,3}(?:/\\\\d{1,2})?$")) ||
+                                entry.contains(":") -> ips.put(entry)
+                            else -> domains.put(if (entry.startsWith("domain:", true)) entry else "domain:$entry")
+                        }
                     }
-                    rule.put("domain", JSONArray().put(domainValue))
-                }
-                rule.put("outboundTag", actionTag)
+                if (domains.length() == 0 && ips.length() == 0) continue
+                val rule = JSONObject().put("type", "field").put("outboundTag", outboundTag)
+                if (domains.length() > 0) rule.put("domain", domains)
+                if (ips.length() > 0) rule.put("ip", ips)
                 rules.put(rule)
             }
-
             if (rules.length() > 0) {
                 config.put("routing", JSONObject()
-                    .put("domainStrategy",
-                        routingPreferences.getString("site_domain_strategy", "IPIfNonMatch"))
+                    .put("domainStrategy", routingPreferences.getString("site_domain_strategy", "IPIfNonMatch"))
                     .put("rules", rules))
             }
         }
