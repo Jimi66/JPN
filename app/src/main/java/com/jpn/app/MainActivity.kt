@@ -1328,7 +1328,7 @@ class MainActivity : Activity() {
                                 entry.startsWith("domain:", true) ||
                                 entry.startsWith("full:", true) ||
                                 entry.startsWith("regexp:", true) -> domains.put(entry)
-                            entry.matches(Regex("""^(?:\\d{1,3}\\.){3}\\d{1,3}(?:/\\d{1,2})?$""")) ||
+                            entry.matches(Regex("""^(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?$""")) ||
                                 entry.contains(":") -> ips.put(entry)
                             else -> domains.put(if (entry.startsWith("domain:", true)) entry else "domain:$entry")
                         }
