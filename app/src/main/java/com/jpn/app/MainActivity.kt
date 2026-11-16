@@ -362,14 +362,17 @@ class MainActivity : Activity() {
             bottomMargin = dp(16)
         }
         screen.addView(addSubscriptionButton, addButtonParams)
-        screen.addView(settingsButton, android.widget.FrameLayout.LayoutParams(dp(48), dp(48)).apply {
+        val settingsButtonParams = android.widget.FrameLayout.LayoutParams(dp(48), dp(48)).apply {
             gravity = Gravity.TOP or Gravity.START
             topMargin = dp(8)
             marginStart = dp(12)
-        })
+        }
+        screen.addView(settingsButton, settingsButtonParams)
         screen.setOnApplyWindowInsetsListener { _, insets ->
             addButtonParams.bottomMargin = dp(16) + insets.systemWindowInsetBottom
             addSubscriptionButton.layoutParams = addButtonParams
+            settingsButtonParams.topMargin = dp(8) + insets.systemWindowInsetTop
+            settingsButton.layoutParams = settingsButtonParams
             insets
         }
         setContentView(screen)
