@@ -207,7 +207,7 @@ class SiteRoutingActivity : Activity() {
         rulesContainer.removeAllViews()
         if (rules.isEmpty()) {
             rulesContainer.addView(TextView(this).apply {
-                text = rule.optString("value") + "\n" + rule.optString("type").uppercase() + " · " + action
+                text = "Правила пока не добавлены"
                 textSize = 14f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF777777.toInt())
@@ -228,7 +228,7 @@ class SiteRoutingActivity : Activity() {
                 else -> "Proxy"
             }
             row.addView(TextView(this).apply {
-                text = "\${rule.optString("value")}\n\${rule.optString("type").uppercase()} · $action"
+                text = rule.optString("value") + "\n" + rule.optString("type").uppercase() + " · " + action
                 textSize = 14f
                 setTextColor(0xFF202124.toInt())
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
