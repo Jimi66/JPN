@@ -106,6 +106,7 @@ class MainActivity : Activity() {
     private val nodes = mutableListOf<JSONObject>()
     private var selectedNodeIndex = -1
     private var lastHapticVpnState: String? = null
+    private var pingCheckRunning = false
     @Volatile private var downloadedSubscriptionName: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
@@ -353,11 +354,10 @@ class MainActivity : Activity() {
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             isEnabled = true
-            isClickable = false
-            alpha = 0.55f
-            setOnLongClickListener {
-                android.widget.Toast.makeText(this@MainActivity, "Проверка серверов — функция пока не активна", android.widget.Toast.LENGTH_SHORT).show()
-                true
+            isClickable = true
+            alpha = 1f
+            setOnClickListener {
+                checkServersLatency(this)
             }
         }
         val nodesHeaderRow = LinearLayout(this).apply {
@@ -1000,6 +1000,67 @@ class MainActivity : Activity() {
             ?: throw IllegalArgumentException("Xray не вернул список серверов")
     }
 
+    /**
+     * Checks each server by timing a TCP connection to its configured endpoint.
+     * This is a reachability/latency estimate, not an ICMP ping or VPN-tunnel RTT.
+     */
+    private fun checkServersLatency(button: ImageButton) {
+        if (pingCheckRunning) return
+        if (nodes.isEmpty()) {
+            setStatus("Нет серверов для проверки")
+            return
+        }
+
+        pingCheckRunning = true
+        button.isEnabled = false
+        button.alpha = 0.45f
+        setStatus("Проверяю доступность серверов…")
+
+        val snapshot = nodes.map { JSONObject(it.toString()) }
+        Thread {
+            snapshot.forEachIndexed { index, node ->
+                val result = measureServerLatency(node)
+                mainHandler.post {
+                    if (index < nodes.size) {
+                        nodes[index].remove("jpnPingMs")
+                        nodes[index].remove("jpnPingFailed")
+                        if (result != null) {
+                            nodes[index].put("jpnPingMs", result)
+                        } else {
+                            nodes[index].put("jpnPingFailed", true)
+                        }
+                        renderNodes()
+                    }
+                }
+            }
+            mainHandler.post {
+                pingCheckRunning = false
+                button.isEnabled = true
+                button.alpha = 1f
+                val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
+                setStatus("Проверка завершена: доступно $available из ${nodes.size}")
+            }
+        }.start()
+    }
+
+    private fun measureServerLatency(outbound: JSONObject): Int? {
+        val settings = outbound.optJSONObject("settings") ?: return null
+        val vnext = settings.optJSONArray("vnext")?.optJSONObject(0)
+        val server = settings.optJSONArray("servers")?.optJSONObject(0)
+        val endpoint = vnext ?: server ?: return null
+        val host = endpoint.optString("address").trim()
+        val port = endpoint.optInt("port", 0)
+        if (host.isBlank() || port !in 1..65535) return null
+
+        return runCatching {
+            val started = System.nanoTime()
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress(host, port), 2500)
+            }
+            ((System.nanoTime() - started) / 1_000_000L).toInt().coerceAtLeast(1)
+        }.getOrNull()
+    }
+
     private fun renderNodes() {
         // ListView is an AdapterView: its rows are owned by the adapter.
         // Calling removeAllViews() here throws UnsupportedOperationException
@@ -1018,7 +1079,13 @@ class MainActivity : Activity() {
         selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
         val labels = nodes.mapIndexed { index, node ->
             val name = node.optString("tag").ifBlank { "Сервер ${index + 1}" }
-            if (node.optBoolean("jpnNeedsValidation", false)) "$name · не проверен" else name
+            val latency = node.optInt("jpnPingMs", -1)
+            when {
+                latency >= 0 -> "$name · $latency мс"
+                node.optBoolean("jpnPingFailed", false) -> "$name · недоступен"
+                node.optBoolean("jpnNeedsValidation", false) -> "$name · не проверен"
+                else -> name
+            }
         }
         nodesContainer.adapter = object : ArrayAdapter<String>(
             this,
