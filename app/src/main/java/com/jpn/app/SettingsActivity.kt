@@ -45,7 +45,7 @@ class SettingsActivity : Activity() {
         })
 
         val routing = TextView(this).apply {
-            text = "Маршрутизация приложений\n\nВыбрать приложения, которые используют VPN"
+            text = "Маршрутизация приложений"
             textSize = 16f
             setTextColor(0xFF202124.toInt())
             setPadding(dp(16), dp(14), dp(16), dp(14))
