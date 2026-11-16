@@ -1019,6 +1019,8 @@ class MainActivity : Activity() {
         pingCheckRunning = true
         button.isEnabled = false
         button.alpha = 0.45f
+        vpnButton.isEnabled = false
+        nodesContainer.isEnabled = false
         val snapshot = nodes.map { JSONObject(it.toString()) }
         val originalWasRunning = isVpnRunning()
         val originalNode = nodes.getOrNull(selectedNodeIndex)?.let { JSONObject(it.toString()) }
@@ -1085,6 +1087,8 @@ class MainActivity : Activity() {
                     pingCheckRunning = false
                     button.isEnabled = true
                     button.alpha = 1f
+                    vpnButton.isEnabled = true
+                    nodesContainer.isEnabled = true
                     val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
                     val summary = "Проверка завершена: доступно $available из ${nodes.size}"
                     setStatus(
