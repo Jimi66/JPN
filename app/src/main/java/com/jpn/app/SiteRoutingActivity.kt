@@ -207,7 +207,7 @@ class SiteRoutingActivity : Activity() {
         rulesContainer.removeAllViews()
         if (rules.isEmpty()) {
             rulesContainer.addView(TextView(this).apply {
-                text = "Правила пока не добавлены"
+                text = rule.optString("value") + "\n" + rule.optString("type").uppercase() + " · " + action
                 textSize = 14f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF777777.toInt())
