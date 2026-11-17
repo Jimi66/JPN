@@ -107,8 +107,8 @@ class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: android.graphics.SurfaceTexture): Boolean {
         releasePlayer()
-        surface?.release()
-        surface = null
+        this.surface?.release()
+        this.surface = null
         return true
     }
 
@@ -130,8 +130,10 @@ class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
 
     private fun releasePlayer() {
         prepared = false
-        mediaPlayer?.runCatching { stop() }
-        mediaPlayer?.release()
+        mediaPlayer?.let { player ->
+            runCatching { player.stop() }
+            player.release()
+        }
         mediaPlayer = null
     }
 
