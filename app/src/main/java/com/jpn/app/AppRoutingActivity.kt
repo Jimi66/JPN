@@ -211,6 +211,23 @@ class AppRoutingActivity : Activity() {
         setContentView(root)
         JpnTheme.apply(this, root)
 
+        // Keep routing mode labels readable in dark theme, including when
+        // the routing switch is currently off.
+        val modeTextColor = JpnTheme.textPrimary(this)
+        val modeTextColors = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_enabled),
+                intArrayOf(-android.R.attr.state_enabled)
+            ),
+            intArrayOf(modeTextColor, modeTextColor)
+        )
+        for (i in 0 until modeGroup.childCount) {
+            (modeGroup.getChildAt(i) as? RadioButton)?.apply {
+                setTextColor(modeTextColors)
+                isEnabled = true
+            }
+        }
+
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
