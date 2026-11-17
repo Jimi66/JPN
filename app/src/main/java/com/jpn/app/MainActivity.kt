@@ -163,7 +163,7 @@ class MainActivity : Activity() {
         launchedFromQuickSettings = intent?.action == ACTION_QUICK_SETTINGS_TOGGLE
         if (launchedFromQuickSettings) setTheme(R.style.JpnVpnConsentTheme)
         super.onCreate(savedInstanceState)
-        JpnTheme.applyBeforeCreate(this)
+        if (!launchedFromQuickSettings) JpnTheme.applyBeforeCreate(this)
         appliedDarkTheme = JpnTheme.isDark(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
@@ -566,7 +566,7 @@ class MainActivity : Activity() {
             insets
         }
         setContentView(screen)
-        JpnTheme.apply(this, screen)
+        if (!launchedFromQuickSettings) JpnTheme.apply(this, screen)
     }
 
     private fun showManualSubscriptionDialog() {
