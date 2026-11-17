@@ -88,6 +88,7 @@ class MainActivity : Activity() {
         private const val KEY_VPN_STATE = "vpn_state"
         private const val KEY_SELECTED_NODE_INDEX = "selected_node_index"
         private const val VPN_REQUEST_CODE = 4102
+        const val ACTION_QUICK_SETTINGS_TOGGLE = "com.jpn.app.action.QUICK_SETTINGS_TOGGLE"
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
     }
 
@@ -168,12 +169,21 @@ class MainActivity : Activity() {
         restoreSavedSubscription()
         AutoSubscriptionScheduler.update(this)
         refreshVpnState()
+        handleQuickSettingsIntent(intent)
         if (nodes.isEmpty()) {
             android.app.AlertDialog.Builder(this)
                 .setTitle("Серверы не добавлены")
                 .setMessage("Нажмите «+», чтобы добавить подписку.")
                 .setPositiveButton("Понятно", null)
                 .show()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (intent != null) {
+            setIntent(intent)
+            handleQuickSettingsIntent(intent)
         }
     }
 
@@ -1530,6 +1540,34 @@ class MainActivity : Activity() {
         } else {
             setStatus("Разрешение Android VPN не предоставлено")
         }
+    }
+
+    private fun handleQuickSettingsIntent(intent: Intent?) {
+        if (intent?.action != ACTION_QUICK_SETTINGS_TOGGLE) return
+        intent.action = null
+
+        if (isVpnRunning()) {
+            setStatus("Отключение VPN…")
+            XrayVpnService.stop(this)
+            return
+        }
+
+        if (selectedNodeIndex !in nodes.indices) {
+            selectedNodeIndex = preferences.getInt(KEY_SELECTED_NODE_INDEX, -1)
+        }
+        if (selectedNodeIndex !in nodes.indices && nodes.isNotEmpty()) {
+            selectedNodeIndex = 0
+            preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
+            renderNodes()
+        }
+
+        val selected = nodes.getOrNull(selectedNodeIndex)
+        if (selected == null) {
+            setStatus("Сначала добавь сервер в JPN")
+            return
+        }
+        val name = selected.optString("tag").ifBlank { "Сервер ${selectedNodeIndex + 1}" }
+        connectToOutbound(selected, name)
     }
 
     private fun startVpnService(config: String) {

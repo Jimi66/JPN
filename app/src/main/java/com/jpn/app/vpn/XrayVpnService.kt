@@ -3,9 +3,11 @@ package com.jpn.app.vpn
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import android.service.quicksettings.TileService
 import android.os.Build
 import android.os.IBinder
 import org.json.JSONArray
@@ -233,6 +235,12 @@ class XrayVpnService : VpnService() {
                 .putExtra("message", message)
                 .putExtra(EXTRA_TEST_MODE, isTestMode)
         )
+        if (!isTestMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            TileService.requestListeningState(
+                this,
+                ComponentName(this, com.jpn.app.QuickSettingsTileService::class.java)
+            )
+        }
     }
 
     private fun createNotificationChannel() {

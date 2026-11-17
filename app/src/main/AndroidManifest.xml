@@ -49,6 +49,17 @@
         </activity>
 
         <service
+            android:name=".QuickSettingsTileService"
+            android:label="JPN VPN"
+            android:icon="@drawable/jpn_power_symbol"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name=".vpn.XrayVpnService"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE"
