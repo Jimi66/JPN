@@ -1,6 +1,7 @@
 package com.jpn.app
 
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
@@ -45,6 +46,8 @@ class AppRoutingActivity : Activity() {
     private lateinit var searchInput: EditText
     private lateinit var selectedCount: TextView
     private lateinit var modeGroup: RadioGroup
+    private var routingTitleTapCount = 0
+    private var routingTitleLastTapTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,11 +128,30 @@ class AppRoutingActivity : Activity() {
                 cornerRadius = dp(14).toFloat()
             }
         }
-        routingToggleRow.addView(TextView(this).apply {
+        val routingToggleLabel = TextView(this).apply {
             text = "Включить маршрутизацию приложений"
             textSize = 15f
             setTextColor(0xFF202124.toInt())
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            setOnClickListener {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - routingTitleLastTapTime > 2500L) {
+                    routingTitleTapCount = 0
+                }
+                routingTitleLastTapTime = now
+                routingTitleTapCount++
+                if (routingTitleTapCount >= 7) {
+                    routingTitleTapCount = 0
+                    startActivity(
+                        Intent(this@AppRoutingActivity, EasterEggActivity::class.java)
+                            .putExtra(EasterEggActivity.EXTRA_VIDEO_RESOURCE, R.raw.easter_egg_apps)
+                    )
+                }
+            }
+        }
+        routingToggleRow.addView(
+            routingToggleLabel,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        )
         val routingSwitch = Switch(this).apply {
             isChecked = preferences.getBoolean(KEY_ROUTING_ENABLED, false)
             contentDescription = "Маршрутизация приложений включена"
