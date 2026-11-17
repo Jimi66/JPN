@@ -76,7 +76,7 @@ class SettingsMenuActivity : Activity() {
         addSubItem(generalItems, "О приложении", textColor, secondaryColor) {
             android.app.AlertDialog.Builder(this)
                 .setTitle("О приложении")
-                .setMessage("Stephani GTP\nAlex Dzh")
+                .setMessage("Stephani GPT\nAlex Dzh")
                 .setPositiveButton("ОК", null)
                 .show()
         }
