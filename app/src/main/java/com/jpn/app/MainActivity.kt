@@ -525,7 +525,7 @@ class MainActivity : Activity() {
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             setPadding(dp(10), dp(10), dp(10), dp(10))
             setOnClickListener {
-                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                startActivity(Intent(this@MainActivity, SettingsMenuActivity::class.java))
             }
         }
         screen.addView(root, android.widget.FrameLayout.LayoutParams(
