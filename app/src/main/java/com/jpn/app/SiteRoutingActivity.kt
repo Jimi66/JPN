@@ -121,26 +121,55 @@ class SiteRoutingActivity : Activity() {
     private fun renderUnifiedEntries() {
         if (!::entriesContainer.isInitialized) return
         entriesContainer.removeAllViews()
-        data class Entry(val key: String, val value: String, val type: String)
-        val entries = buildList {
-            readSaved(KEY_GEOIP).forEach { add(Entry(KEY_GEOIP, it, "GeoIP")) }
-            readSaved(KEY_GEOSITE).forEach { add(Entry(KEY_GEOSITE, it, "GeoSite")) }
-            readSaved(KEY_IPS).forEach { add(Entry(KEY_IPS, it, "IP")) }
-            readSaved(KEY_DOMAINS).forEach { add(Entry(KEY_DOMAINS, it, "Домен")) }
+        val groups = listOf(
+            Triple("GeoIP", KEY_GEOIP, ""),
+            Triple("GeoSite", KEY_GEOSITE, ""),
+            Triple("IP", KEY_IPS, "IP-адрес или подсеть"),
+            Triple("Домен", KEY_DOMAINS, "домен")
+        )
+        val hasEntries = groups.any { readSaved(it.second).isNotEmpty() }
+        if (!hasEntries) {
+            entriesContainer.addView(TextView(this).apply {
+                text = "Список пока пуст. Нажми «Добавить», чтобы создать первое правило."
+                textSize = 14f; setTextColor(0xFF888888.toInt()); gravity = Gravity.CENTER
+                setPadding(dp(16), dp(28), dp(16), dp(28))
+            }, matchWidth())
+            return
         }
-        if (entries.isEmpty()) { entriesContainer.addView(TextView(this).apply { text = "Список пока пуст. Нажми «Добавить», чтобы создать первое правило."; textSize = 14f; setTextColor(0xFF888888.toInt()); gravity = Gravity.CENTER; setPadding(dp(16), dp(28), dp(16), dp(28)) }, matchWidth()); return }
-        entries.forEach { entry ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(13), dp(9), dp(13), dp(9)); background = fieldBackground(); isLongClickable = true
-                setOnLongClickListener {
-                    AlertDialog.Builder(this@SiteRoutingActivity).setTitle("Удалить запись?").setMessage(entry.type + ": " + entry.value).setNegativeButton("Отмена", null).setPositiveButton("Удалить") { _, _ ->
-                        val updated = readSaved(entry.key).toMutableList(); updated.remove(entry.value); saveList(entry.key, updated); renderUnifiedEntries()
-                    }.show(); true
+
+        groups.forEach { (type, key, editLabel) ->
+            val values = readSaved(key)
+            if (values.isNotEmpty()) {
+                sectionTitle(entriesContainer, type)
+                values.forEach { value ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(13), dp(11), dp(13), dp(11))
+                        background = fieldBackground()
+                        isLongClickable = true
+                        setOnLongClickListener {
+                            AlertDialog.Builder(this@SiteRoutingActivity)
+                                .setTitle("Удалить запись?")
+                                .setMessage("$type: $value")
+                                .setNegativeButton("Отмена", null)
+                                .setPositiveButton("Удалить") { _, _ ->
+                                    val updated = readSaved(key).toMutableList()
+                                    updated.remove(value)
+                                    saveList(key, updated)
+                                    renderUnifiedEntries()
+                                }.show()
+                            true
+                        }
+                    }
+                    row.addView(TextView(this@SiteRoutingActivity).apply {
+                        text = value; textSize = 14f; setTextColor(0xFF202124.toInt())
+                    })
+                    if (editLabel.isNotEmpty()) {
+                        row.setOnClickListener { showManualEditor(key, editLabel, value) }
+                    }
+                    entriesContainer.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
                 }
             }
-            row.addView(TextView(this).apply { text = entry.type; textSize = 11f; setTextColor(0xFF514B83.toInt()); setTypeface(typeface, Typeface.BOLD) })
-            row.addView(TextView(this).apply { text = entry.value; textSize = 14f; setTextColor(0xFF202124.toInt()); setPadding(0, dp(3), 0, 0) })
-            if (entry.key == KEY_DOMAINS || entry.key == KEY_IPS) row.setOnClickListener { showManualEditor(entry.key, if (entry.key == KEY_DOMAINS) "домен" else "IP-адрес или подсеть", entry.value) }
-            entriesContainer.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
         }
     }
 
