@@ -208,7 +208,7 @@ class QuickSettingsTileService : TileService() {
         val connecting = state == "connecting"
         val disconnecting = state == "disconnecting"
 
-        tile.label = "JPN VPN"
+        tile.label = "JPN"
         tile.icon = Icon.createWithResource(this, R.drawable.jpn_power_symbol)
         tile.state = if (connected || connecting) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
