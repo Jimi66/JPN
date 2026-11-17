@@ -47,11 +47,25 @@ jobs:
       - name: Install Android platform, build tools and NDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
 
-      - name: Build native Xray library (libXray AAR)
+      - name: Checkout pinned libXray source
         run: |
           git clone https://github.com/XTLS/libXray.git
           cd libXray
           git checkout 5a0f7d8d1c28b34afb5727b04b26a10f6dbac7e3
+
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-1.27.3-libxray-5a0f7d8-${{ hashFiles('libXray/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-1.27.3-libxray-5a0f7d8-
+
+      - name: Build native Xray library (libXray AAR)
+        run: |
+          cd libXray
           python3 - <<'PY'
           from pathlib import Path
 
