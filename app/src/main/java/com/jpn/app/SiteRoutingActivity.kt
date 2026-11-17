@@ -158,23 +158,6 @@ class SiteRoutingActivity : Activity() {
         addButton.alpha = if (enabled) 1f else 0.45f
     }
 
-    private fun summaryText() = TextView(this).apply {
-        textSize = 13f; setTextColor(0xFF555555.toInt())
-        setPadding(dp(10), dp(7), dp(10), dp(7))
-        background = fieldBackground()
-    }
-
-    private fun refreshGeoSummaries() {
-        if (!::geositeSummary.isInitialized) return
-        fun text(key: String, fileName: String): String {
-            val selected = readSaved(key)
-            val available = readCategories(File(filesDir, fileName)).size
-            return "Выбрано: ${selected.size}" + if (available > 0) " · В базе: $available" else " · База не загружена"
-        }
-        geositeSummary.text = text(KEY_GEOSITE, "geosite.dat")
-        geoipSummary.text = text(KEY_GEOIP, "geoip.dat")
-    }
-
     private fun showCategoryPicker(title: String, fileName: String, key: String) {
         val categories = readCategories(File(filesDir, fileName))
         if (categories.isEmpty()) { AlertDialog.Builder(this).setTitle("База $title не загружена").setMessage("Сначала обнови базы GeoSite и GeoIP.").setNegativeButton("Позже", null).setPositiveButton("Обновить базы") { _, _ -> downloadGeoFiles() }.show(); return }
