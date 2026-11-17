@@ -145,8 +145,17 @@ class SiteRoutingActivity : Activity() {
     }
 
     private fun setRoutingOptionsEnabled(enabled: Boolean) {
-        routingBody.isEnabled = enabled; routingScroll.isEnabled = enabled; entriesContainer.isEnabled = enabled; addButton.isEnabled = enabled
-        routingBody.alpha = if (enabled) 1f else 0.45f; addButton.alpha = if (enabled) 1f else 0.45f
+        fun update(view: View) {
+            view.isEnabled = enabled
+            if (view is LinearLayout) {
+                for (index in 0 until view.childCount) update(view.getChildAt(index))
+            }
+        }
+        update(routingBody)
+        routingScroll.isEnabled = enabled
+        addButton.isEnabled = enabled
+        routingBody.alpha = if (enabled) 1f else 0.45f
+        addButton.alpha = if (enabled) 1f else 0.45f
     }
 
     private fun summaryText() = TextView(this).apply {
