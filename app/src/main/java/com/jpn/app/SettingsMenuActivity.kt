@@ -11,11 +11,22 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 class SettingsMenuActivity : Activity() {
+    private var renderedDark: Boolean? = null
+
+    override fun onResume() {
+        super.onResume()
+        val currentDark = JpnTheme.isDark(this)
+        if (renderedDark != null && renderedDark != currentDark) {
+            recreate()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         JpnTheme.applyBeforeCreate(this)
 
         val dark = JpnTheme.isDark(this)
+        renderedDark = dark
         val textColor = if (dark) 0xFFF1F1F5.toInt() else 0xFF202124.toInt()
         val secondaryColor = if (dark) 0xFFB9BAC4.toInt() else 0xFF55565C.toInt()
         val cardColor = if (dark) 0xFF292B33.toInt() else 0xFFF7F7F8.toInt()
