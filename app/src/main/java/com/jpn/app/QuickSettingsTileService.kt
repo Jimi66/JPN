@@ -1,15 +1,24 @@
 package com.jpn.app
 
-import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Intent
 import android.graphics.drawable.Icon
+import android.net.VpnService
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import android.widget.Toast
+import com.jpn.app.vpn.XrayVpnService
+import libXray.LibXray
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Android Quick Settings tile for toggling the JPN VPN connection.
- * Starting requires the normal Android VPN consent flow, handled by MainActivity.
+ *
+ * If Android VPN consent has already been granted, the tile starts/stops the
+ * VPN service directly without opening MainActivity. MainActivity is needed
+ * only for the first-time Android VPN consent screen.
  */
 class QuickSettingsTileService : TileService() {
 
@@ -20,23 +29,168 @@ class QuickSettingsTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val launchIntent = Intent(this, MainActivity::class.java).apply {
-            action = MainActivity.ACTION_QUICK_SETTINGS_TOGGLE
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val preferences = getSharedPreferences("jpn_settings", MODE_PRIVATE)
+        val savedState = preferences.getString("vpn_state", "disconnected")
+
+        if (savedState == "connected" || isXrayRunning()) {
+            XrayVpnService.stop(this)
+            return
         }
 
-        if (Build.VERSION.SDK_INT >= 34) {
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                4103,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            startActivityAndCollapse(pendingIntent)
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(launchIntent)
+        // Android requires an Activity for the system VPN consent prompt.
+        // Once consent is granted, all subsequent tile toggles stay in background.
+        if (VpnService.prepare(this) != null) {
+            val consentIntent = Intent(this, MainActivity::class.java).apply {
+                action = MainActivity.ACTION_QUICK_SETTINGS_TOGGLE
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivityAndCollapse(consentIntent)
+            return
         }
+
+        startVpnInBackground()
+    }
+
+    private fun startVpnInBackground() {
+        val preferences = getSharedPreferences("jpn_settings", MODE_PRIVATE)
+        try {
+            val savedNodes = preferences.getString("saved_nodes_json", null)
+                ?: throw IllegalStateException("Сначала добавь сервер в JPN")
+            val nodes = JSONArray(savedNodes)
+            if (nodes.length() == 0) {
+                throw IllegalStateException("В JPN нет сохранённых серверов")
+            }
+
+            var selectedIndex = preferences.getInt("selected_node_index", -1)
+            if (selectedIndex !in 0 until nodes.length()) {
+                selectedIndex = 0
+                preferences.edit().putInt("selected_node_index", selectedIndex).apply()
+            }
+
+            var outbound = JSONObject(nodes.getJSONObject(selectedIndex).toString())
+            val rawShareLink = outbound.optString("jpnRawShareLink")
+            if (rawShareLink.isNotBlank()) {
+                val parsedResponse = JSONObject(
+                    LibXray.invoke(
+                        JSONObject()
+                            .put("apiVersion", 3)
+                            .put("method", "convertShareLinksToXrayJson")
+                            .put("payload", JSONObject().put("text", rawShareLink))
+                            .toString()
+                    )
+                )
+                if (!parsedResponse.optBoolean("success", false)) {
+                    throw IllegalStateException("Не удалось подготовить выбранный сервер")
+                }
+                val parsedOutbounds = parsedResponse.optJSONObject("data")?.optJSONArray("outbounds")
+                if (parsedOutbounds == null || parsedOutbounds.length() == 0) {
+                    throw IllegalStateException("Xray не вернул конфигурацию сервера")
+                }
+                outbound = JSONObject(parsedOutbounds.getJSONObject(0).toString())
+            }
+
+            val config = buildXrayConfig(outbound, preferences)
+            preferences.edit()
+                .putString("vpn_state", "connecting")
+                .putString("vpn_message", "Подключение…")
+                .apply()
+            XrayVpnService.start(this, config)
+            refreshTile()
+        } catch (error: Exception) {
+            preferences.edit()
+                .putString("vpn_state", "error")
+                .putString("vpn_message", error.message ?: "Не удалось запустить VPN")
+                .apply()
+            refreshTile()
+            Toast.makeText(
+                this,
+                error.message ?: "Не удалось запустить VPN",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun buildXrayConfig(selectedOutbound: JSONObject, preferences: android.content.SharedPreferences): String {
+        val directOutbound = JSONObject()
+            .put("tag", "jpn-direct")
+            .put("protocol", "freedom")
+            .put("settings", JSONObject())
+
+        val outbounds = JSONArray()
+            .put(JSONObject(selectedOutbound.toString()))
+            .put(directOutbound)
+        val config = JSONObject()
+            .put("log", JSONObject().put("loglevel", "warning"))
+            .put("outbounds", outbounds)
+            .put("env", JSONObject().put("xray.location.asset", filesDir.absolutePath))
+
+        if (preferences.getBoolean("site_routing_enabled", false)) {
+            val domains = JSONArray()
+            preferences.getString("site_direct_geosite", "").orEmpty()
+                .lineSequence().map { it.trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { domains.put("geosite:$it") }
+            preferences.getString("site_manual_domains", "").orEmpty()
+                .lineSequence().map { it.substringBefore("#").trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { entry ->
+                    val rule = when {
+                        entry.startsWith("domain:", true) ||
+                            entry.startsWith("full:", true) ||
+                            entry.startsWith("regexp:", true) ||
+                            entry.startsWith("geosite:", true) -> entry
+                        else -> "domain:$entry"
+                    }
+                    domains.put(rule)
+                }
+
+            val ips = JSONArray()
+            preferences.getString("site_direct_geoip", "").orEmpty()
+                .lineSequence().map { it.trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { ips.put("geoip:$it") }
+            preferences.getString("site_manual_ips", "").orEmpty()
+                .lineSequence().map { it.substringBefore("#").trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { ips.put(it) }
+
+            if (domains.length() > 0 || ips.length() > 0) {
+                val bypassRules = JSONArray()
+                if (domains.length() > 0) {
+                    bypassRules.put(
+                        JSONObject()
+                            .put("type", "field")
+                            .put("domain", domains)
+                            .put("outboundTag", "jpn-direct")
+                    )
+                }
+                if (ips.length() > 0) {
+                    bypassRules.put(
+                        JSONObject()
+                            .put("type", "field")
+                            .put("ip", ips)
+                            .put("outboundTag", "jpn-direct")
+                    )
+                }
+                config.put(
+                    "routing",
+                    JSONObject()
+                        .put("domainStrategy", "AsIs")
+                        .put("rules", bypassRules)
+                )
+            }
+        }
+        return config.toString()
+    }
+
+    private fun isXrayRunning(): Boolean {
+        return runCatching {
+            val response = JSONObject(
+                LibXray.invoke(
+                    JSONObject()
+                        .put("apiVersion", 3)
+                        .put("method", "getXrayState")
+                        .toString()
+                )
+            )
+            response.opt("data") == true
+        }.getOrDefault(false)
     }
 
     private fun refreshTile() {
