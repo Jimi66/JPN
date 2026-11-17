@@ -216,6 +216,8 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
 
@@ -290,6 +292,9 @@ class MainActivity : Activity() {
         val vpnArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            clipChildren = false
+            clipToPadding = false
+            setPadding(0, dp(12), 0, 0)
             addView(vpnButton, LinearLayout.LayoutParams(dp(156), dp(156)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 bottomMargin = dp(8)
@@ -299,7 +304,7 @@ class MainActivity : Activity() {
         root.addView(vpnArea, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = dp(120)
+            topMargin = dp(108)
             bottomMargin = dp(12)
         })
 
