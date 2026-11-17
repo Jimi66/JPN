@@ -72,6 +72,14 @@ class SettingsMenuActivity : Activity() {
                 .setNegativeButton("Отмена", null)
                 .show()
         }
+        addDivider(generalItems, borderColor)
+        addSubItem(generalItems, "О приложении", textColor, secondaryColor) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("JPN")
+                .setMessage("Версия ${BuildConfig.VERSION_NAME}")
+                .setPositiveButton("ОК", null)
+                .show()
+        }
         content.addView(generalItems, sectionParams())
 
         content.addView(sectionTitle("Настройки TUN модуля", textColor).apply {
