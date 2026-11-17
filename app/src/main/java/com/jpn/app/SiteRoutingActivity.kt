@@ -43,8 +43,8 @@ class SiteRoutingActivity : Activity() {
     private var initialSnapshot = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
+        JpnTheme.applyBeforeCreate(this)
         migrateLegacyDirectRules()
         buildScreen()
         initialSnapshot = snapshot()
