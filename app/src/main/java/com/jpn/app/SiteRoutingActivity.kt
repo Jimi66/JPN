@@ -42,8 +42,6 @@ class SiteRoutingActivity : Activity() {
     private lateinit var routingBody: LinearLayout
     private lateinit var routingScroll: ScrollView
     private var initialSnapshot = ""
-    private var easterEggTapCount = 0
-    private var lastEasterEggTap = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,9 +101,6 @@ class SiteRoutingActivity : Activity() {
             text = "Включить маршрутизацию сайтов"
             textSize = 15f
             setTextColor(0xFF202124.toInt())
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { handleEasterEggTap() }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         enabledSwitch = Switch(this).apply { isChecked = prefs.getBoolean(KEY_ENABLED, true); contentDescription = "Маршрутизация сайтов включена" }
         toggleRow.addView(enabledSwitch)
@@ -125,17 +120,6 @@ class SiteRoutingActivity : Activity() {
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
     }
 
-    private fun handleEasterEggTap() {
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastEasterEggTap > 2500L) easterEggTapCount = 0
-        lastEasterEggTap = now
-        easterEggTapCount++
-
-        if (easterEggTapCount >= 7) {
-            easterEggTapCount = 0
-            startActivity(android.content.Intent(this, EasterEggActivity::class.java).putExtra(EasterEggActivity.EXTRA_VIDEO_RESOURCE, R.raw.easter_egg_routing))
-        }
-    }
 
     private fun createSoftCapsuleButton(label: String, action: () -> Unit): Button {
         fun capsule(colors: IntArray, strokeColor: Int, strokeWidth: Int) =
