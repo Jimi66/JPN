@@ -13,7 +13,7 @@ object AutoSubscriptionScheduler {
 
     fun update(context: Context) {
         val prefs = context.getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean(SubscriptionAutoUpdateActivity.KEY_ENABLED, false)
+        val enabled = prefs.getBoolean(SubscriptionAutoUpdateActivity.KEY_ENABLED, true)
         val url = prefs.getString("subscription_url", null)
         if (!enabled || url.isNullOrBlank()) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
