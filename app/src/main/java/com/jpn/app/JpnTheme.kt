@@ -17,7 +17,7 @@ object JpnTheme {
     const val LIGHT = "light"
     const val DARK = "dark"
 
-    private fun isDark(activity: Activity): Boolean {
+    fun isDark(activity: Activity): Boolean {
         return when (activity.getSharedPreferences(PREFS, Activity.MODE_PRIVATE)
             .getString("interface_theme", SYSTEM)) {
             DARK -> true
@@ -27,6 +27,11 @@ object JpnTheme {
                 android.content.res.Configuration.UI_MODE_NIGHT_YES
         }
     }
+
+    fun textPrimary(activity: Activity): Int = if (isDark(activity)) 0xFFEFF0F5.toInt() else 0xFF202124.toInt()
+    fun textSecondary(activity: Activity): Int = if (isDark(activity)) 0xFFAEB1BC.toInt() else 0xFF666666.toInt()
+    fun surface(activity: Activity): Int = if (isDark(activity)) 0xFF272930.toInt() else 0xFFF4F5F6.toInt()
+    fun border(activity: Activity): Int = if (isDark(activity)) 0xFF434651.toInt() else 0xFFE2E3E7.toInt()
 
     fun applyBeforeCreate(activity: Activity) {
         activity.setTheme(if (isDark(activity)) R.style.JpnDarkTheme else R.style.JpnLightTheme)
@@ -41,7 +46,9 @@ object JpnTheme {
         val border = if (dark) Color.rgb(67,70,81) else Color.rgb(226,227,231)
         root.setBackgroundColor(bg)
         fun walk(v: View) {
-            if (v is TextView) {
+            if (v is android.widget.Button) {
+                v.setTextColor(0xFF454545.toInt())
+            } else if (v is TextView) {
                 val old = v.currentTextColor
                 val accent = old == 0xFF514B83.toInt() || old == 0xFF706AA5.toInt()
                 val muted = old == 0xFF9A9AA0.toInt() || old == 0xFF73777D.toInt() ||
@@ -49,6 +56,7 @@ object JpnTheme {
                 if (!accent) v.setTextColor(if (muted) secondary else primary)
             }
             if (v is EditText) {
+                v.setTextColor(primary)
                 v.setHintTextColor(secondary)
                 v.background = GradientDrawable().apply {
                     setColor(surface)

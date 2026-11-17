@@ -110,7 +110,7 @@ class SiteRoutingActivity : Activity() {
         root.addView(createSoftCapsuleButton("Сохранить") { saveSettings(); finish() },
             LinearLayout.LayoutParams(-1, dp(38)).apply { bottomMargin = dp(8) })
         setContentView(root)
-        JpnTheme.apply(this, root); renderUnifiedEntries()
+        renderUnifiedEntries(); JpnTheme.apply(this, root)
         enabledSwitch.setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean(KEY_ENABLED, checked).apply(); markRestartPending(); setRoutingOptionsEnabled(checked) }
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
     }
@@ -170,7 +170,7 @@ class SiteRoutingActivity : Activity() {
         if (!hasEntries) {
             entriesContainer.addView(TextView(this).apply {
                 text = "Список пока пуст. Нажми «Добавить», чтобы создать первое правило."
-                textSize = 14f; setTextColor(0xFF888888.toInt()); gravity = Gravity.CENTER
+                textSize = 14f; setTextColor(JpnTheme.textSecondary(this@SiteRoutingActivity)); gravity = Gravity.CENTER
                 setPadding(dp(16), dp(28), dp(16), dp(28))
             }, matchWidth())
             return
@@ -201,7 +201,7 @@ class SiteRoutingActivity : Activity() {
                         }
                     }
                     row.addView(TextView(this@SiteRoutingActivity).apply {
-                        text = value; textSize = 14f; setTextColor(0xFF202124.toInt())
+                        text = value; textSize = 14f; setTextColor(JpnTheme.textPrimary(this@SiteRoutingActivity))
                     })
                     if (editLabel.isNotEmpty()) {
                         row.setOnClickListener { showManualEditor(key, editLabel, value) }
@@ -454,8 +454,8 @@ class SiteRoutingActivity : Activity() {
     }
 
     private fun fieldBackground() = android.graphics.drawable.GradientDrawable().apply {
-        setColor(0xFFF4F5F6.toInt()); cornerRadius = dp(10).toFloat()
-        setStroke(dp(1), 0xFFE2E3E7.toInt())
+        setColor(JpnTheme.surface(this)); cornerRadius = dp(10).toFloat()
+        setStroke(dp(1), JpnTheme.border(this))
     }
 
     private fun matchWidth() = LinearLayout.LayoutParams(-1, -2)

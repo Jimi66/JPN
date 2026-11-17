@@ -455,9 +455,9 @@ class MainActivity : Activity() {
         val serverCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFFF4F5F6.toInt())
+                setColor(JpnTheme.surface(this@MainActivity))
                 cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0xFFD9DDE1.toInt())
+                setStroke(dp(1), JpnTheme.border(this@MainActivity))
             }
             clipToOutline = true
             addView(nodesHeaderRow, matchWidth())
@@ -1331,15 +1331,15 @@ class MainActivity : Activity() {
                 if (position == selectedNodeIndex) {
                     row.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     row.background = android.graphics.drawable.GradientDrawable().apply {
-                        setColor(0xFF34343A.toInt())
+                        setColor(if (JpnTheme.isDark(this@MainActivity)) 0xFF484B56.toInt() else 0xFFE8E9F2.toInt())
                         cornerRadius = dp(8).toFloat()
                     }
-                    row.findViewWithTag<TextView>("server_name").setTextColor(android.graphics.Color.WHITE)
-                    row.findViewWithTag<TextView>("server_latency").setTextColor(0xFFE0E0E0.toInt())
+                    row.findViewWithTag<TextView>("server_name").setTextColor(JpnTheme.textPrimary(this@MainActivity))
+                    row.findViewWithTag<TextView>("server_latency").setTextColor(JpnTheme.textSecondary(this@MainActivity))
                 } else {
                     row.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-                    row.findViewWithTag<TextView>("server_name").setTextColor(0xFF202124.toInt())
-                    row.findViewWithTag<TextView>("server_latency").setTextColor(0xFF60646A.toInt())
+                    row.findViewWithTag<TextView>("server_name").setTextColor(JpnTheme.textPrimary(this@MainActivity))
+                    row.findViewWithTag<TextView>("server_latency").setTextColor(JpnTheme.textSecondary(this@MainActivity))
                 }
                 return row
             }
@@ -1657,8 +1657,8 @@ class MainActivity : Activity() {
 
     private fun updateVpnButtonAppearance(running: Boolean) {
         if (!::vpnButton.isInitialized) return
-        val backgroundColor = if (running) 0xFF706AA5.toInt() else 0xFFE1E3F7.toInt()
-        val symbolColor = if (running) 0xFFE1E3F7.toInt() else 0xFF706AA5.toInt()
+        val backgroundColor = if (running) 0xFF706AA5.toInt() else if (JpnTheme.isDark(this)) 0xFF343640.toInt() else 0xFFE1E3F7.toInt()
+        val symbolColor = if (running) 0xFFE1E3F7.toInt() else if (JpnTheme.isDark(this)) 0xFFAAA4E0.toInt() else 0xFF706AA5.toInt()
         vpnButton.setImageResource(R.drawable.jpn_power_symbol)
         vpnButton.imageTintList = android.content.res.ColorStateList.valueOf(symbolColor)
         vpnButton.background = android.graphics.drawable.GradientDrawable().apply {
