@@ -110,16 +110,34 @@ class SiteRoutingActivity : Activity() {
             text = "Маршрутизация сайтов"; textSize = 19f
             setTypeface(typeface, Typeface.BOLD); setTextColor(0xFF202124.toInt())
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        enabledSwitch = Switch(this).apply {
-            text = "Вкл."
-            isChecked = prefs.getBoolean(KEY_ENABLED, false)
-        }
-        header.addView(enabledSwitch)
         root.addView(header, matchWidth())
         root.addView(TextView(this).apply {
             text = "Весь трафик идёт через VPN. Только выбранные ниже домены, GeoSite и IP-адреса будут обходить VPN."
             textSize = 13f; setTextColor(0xFF666666.toInt()); setPadding(0, dp(4), 0, dp(10))
         })
+
+        val routingToggleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(8), dp(12), dp(8))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFF4F5F6.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+        }
+        routingToggleRow.addView(TextView(this).apply {
+            text = "Включить маршрутизацию сайтов"
+            textSize = 15f
+            setTextColor(0xFF202124.toInt())
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        enabledSwitch = Switch(this).apply {
+            isChecked = prefs.getBoolean(KEY_ENABLED, false)
+            contentDescription = "Маршрутизация сайтов включена"
+        }
+        routingToggleRow.addView(enabledSwitch)
+        root.addView(routingToggleRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
 
         val scroll = ScrollView(this)
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
