@@ -1,14 +1,20 @@
 package com.jpn.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 
 class SettingsActivity : Activity() {
+
+    private var easterEggTapCount = 0
+    private var lastEasterEggTap = 0L
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,11 +126,36 @@ class SettingsActivity : Activity() {
             gravity = Gravity.CENTER
             setTextColor(0xFF9A9AA0.toInt())
             setPadding(0, dp(8), 0, dp(4))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { handleEasterEggTap() }
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
         setContentView(root)
+    }
+
+    private fun handleEasterEggTap() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastEasterEggTap > 2500L) easterEggTapCount = 0
+        lastEasterEggTap = now
+        easterEggTapCount++
+
+        if (easterEggTapCount >= 7) {
+            easterEggTapCount = 0
+            AlertDialog.Builder(this)
+                .setTitle("🥚 Пасхалка найдена!")
+                .setMessage(
+                    "Ты обнаружил секрет JPN.\n\n" +
+                    "Пусть соединение будет стабильным, маршруты — правильными, " +
+                    "а баги обходят тебя стороной.\n\n" +
+                    "Спасибо, что помогаешь нам делать JPN лучше!\n" +
+                    "— Stephani GPT & Alex Dzh"
+                )
+                .setPositiveButton("Продолжить", null)
+                .show()
+        }
     }
 
     private fun dp(value: Int): Int =
