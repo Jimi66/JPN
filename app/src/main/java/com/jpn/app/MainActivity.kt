@@ -155,9 +155,12 @@ class MainActivity : Activity() {
         }
     }
 
+    private var appliedDarkTheme: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         JpnTheme.applyBeforeCreate(this)
+        appliedDarkTheme = JpnTheme.isDark(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
         DefaultSiteRoutingRules.ensure(this)
@@ -191,6 +194,11 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        val currentDarkTheme = JpnTheme.isDark(this)
+        if (currentDarkTheme != appliedDarkTheme) {
+            recreate()
+            return
+        }
         applyPendingSiteRoutingRestart()
     }
 
