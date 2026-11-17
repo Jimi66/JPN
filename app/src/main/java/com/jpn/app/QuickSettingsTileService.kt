@@ -32,7 +32,14 @@ class QuickSettingsTileService : TileService() {
         val preferences = getSharedPreferences("jpn_settings", MODE_PRIVATE)
         val savedState = preferences.getString("vpn_state", "disconnected")
 
-        if (savedState == "connected" || isXrayRunning()) {
+        if (savedState == "connected" || savedState == "connecting" || isXrayRunning()) {
+            // Reflect the user's tap immediately; the VPN service will publish
+            // the final disconnected state once the tunnel has actually stopped.
+            preferences.edit()
+                .putString("vpn_state", "disconnecting")
+                .putString("vpn_message", "Отключение…")
+                .apply()
+            refreshTile()
             XrayVpnService.stop(this)
             return
         }
@@ -199,6 +206,7 @@ class QuickSettingsTileService : TileService() {
         val state = preferences.getString("vpn_state", "disconnected")
         val connected = state == "connected"
         val connecting = state == "connecting"
+        val disconnecting = state == "disconnecting"
 
         tile.label = "JPN VPN"
         tile.icon = Icon.createWithResource(this, R.drawable.jpn_power_symbol)
@@ -207,6 +215,7 @@ class QuickSettingsTileService : TileService() {
             tile.subtitle = when {
                 connected -> "Подключено"
                 connecting -> "Подключение…"
+                disconnecting -> "Отключение…"
                 state == "error" -> "Ошибка"
                 else -> "Выключено"
             }
@@ -215,6 +224,7 @@ class QuickSettingsTileService : TileService() {
             tile.stateDescription = when {
                 connected -> "VPN подключён"
                 connecting -> "VPN подключается"
+                disconnecting -> "VPN отключается"
                 state == "error" -> preferences.getString("vpn_message", "Ошибка VPN")
                 else -> "VPN выключен"
             }
