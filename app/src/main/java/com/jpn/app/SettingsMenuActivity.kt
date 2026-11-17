@@ -68,6 +68,10 @@ class SettingsMenuActivity : Activity() {
         addSubItem(tunItems, "Маршрутизация сайтов", textColor, secondaryColor) {
             startActivity(Intent(this, SiteRoutingActivity::class.java))
         }
+        addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Автообновление подписки", textColor, secondaryColor) {
+            startActivity(Intent(this, SubscriptionAutoUpdateActivity::class.java))
+        }
         content.addView(tunItems, sectionParams())
 
         val scroll = ScrollView(this).apply {

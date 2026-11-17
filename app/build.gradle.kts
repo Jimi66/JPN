@@ -32,4 +32,5 @@ android {
 dependencies {
     implementation(files("libs/libXray.aar"))
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
 }
