@@ -1430,6 +1430,11 @@ class MainActivity : Activity() {
             }.start()
             return
         }
+        getSharedPreferences("jpn_settings", MODE_PRIVATE)
+            .edit()
+            .putString("vpn_server_name", name)
+            .apply()
+
         if (isVpnRunning()) {
             pendingSelectedOutbound = JSONObject(outbound.toString())
             pendingSelectedName = name
