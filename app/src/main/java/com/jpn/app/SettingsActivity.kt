@@ -1,7 +1,6 @@
 package com.jpn.app
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
@@ -144,17 +143,7 @@ class SettingsActivity : Activity() {
 
         if (easterEggTapCount >= 7) {
             easterEggTapCount = 0
-            AlertDialog.Builder(this)
-                .setTitle("🥚 Пасхалка найдена!")
-                .setMessage(
-                    "Ты обнаружил секрет JPN.\n\n" +
-                    "Пусть соединение будет стабильным, маршруты — правильными, " +
-                    "а баги обходят тебя стороной.\n\n" +
-                    "Спасибо, что помогаешь нам делать JPN лучше!\n" +
-                    "— Stephani GPT & Alex Dzh"
-                )
-                .setPositiveButton("Продолжить", null)
-                .show()
+            startActivity(Intent(this, EasterEggActivity::class.java))
         }
     }
 
