@@ -515,17 +515,48 @@ class MainActivity : Activity() {
                 }.show()
             }
         }
-        val settingsButton = ImageButton(this).apply {
-            setImageResource(R.drawable.jpn_settings_gear)
-            applyMainIconTint(this)
-            contentDescription = "Настройки"
-            val selectableBackground = android.util.TypedValue()
-            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
-            background = getDrawable(selectableBackground.resourceId)
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            setOnClickListener {
-                startActivity(Intent(this@MainActivity, SettingsMenuActivity::class.java))
+        val settingsShortcuts = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            val dark = JpnTheme.isDark(this@MainActivity)
+            val cardColor = if (dark) 0xFF343640.toInt() else 0xFFF4F5F6.toInt()
+            val textColor = if (dark) 0xFFF1F1F5.toInt() else 0xFF202124.toInt()
+
+            fun addShortcut(title: String, action: () -> Unit) {
+                val item = TextView(this@MainActivity).apply {
+                    text = title
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                    setTextColor(textColor)
+                    setPadding(dp(8), dp(10), dp(8), dp(10))
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(cardColor)
+                        cornerRadius = dp(12).toFloat()
+                    }
+                    isClickable = true
+                    isFocusable = true
+                    foreground = android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(0x26000000),
+                        null,
+                        android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                            cornerRadius = dp(12).toFloat()
+                            setColor(android.graphics.Color.WHITE)
+                        }
+                    )
+                    setOnClickListener { action() }
+                }
+                addView(item, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (childCount > 0) marginStart = dp(8)
+                })
+            }
+
+            addShortcut("Настройки TUN модуля") {
+                startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+            }
+            addShortcut("Общие настройки") {
+                startActivity(Intent(this@MainActivity, GeneralSettingsActivity::class.java))
             }
         }
         screen.addView(root, android.widget.FrameLayout.LayoutParams(
@@ -538,17 +569,21 @@ class MainActivity : Activity() {
             bottomMargin = dp(16)
         }
         screen.addView(addSubscriptionButton, addButtonParams)
-        val settingsButtonParams = android.widget.FrameLayout.LayoutParams(dp(48), dp(48)).apply {
+        val settingsShortcutsParams = android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
             gravity = Gravity.TOP or Gravity.START
             topMargin = dp(8)
-            marginStart = dp(12)
+            marginStart = dp(8)
+            marginEnd = dp(8)
         }
-        screen.addView(settingsButton, settingsButtonParams)
+        screen.addView(settingsShortcuts, settingsShortcutsParams)
         screen.setOnApplyWindowInsetsListener { _, insets ->
             addButtonParams.bottomMargin = dp(16) + insets.systemWindowInsetBottom
             addSubscriptionButton.layoutParams = addButtonParams
-            settingsButtonParams.topMargin = dp(8) + insets.systemWindowInsetTop
-            settingsButton.layoutParams = settingsButtonParams
+            settingsShortcutsParams.topMargin = dp(8) + insets.systemWindowInsetTop
+            settingsShortcuts.layoutParams = settingsShortcutsParams
             insets
         }
         setContentView(screen)
