@@ -159,6 +159,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
+        DefaultSiteRoutingRules.ensure(this)
         GeoDatabaseInstaller.ensure(this)
         restoreSavedSubscription()
         refreshVpnState()
