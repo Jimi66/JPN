@@ -106,7 +106,7 @@ class SiteRoutingActivity : Activity() {
         root.addView(routingScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addButton = Button(this).apply { text = "Добавить"; minHeight = dp(50); setOnClickListener { showAddMenu() } }
         root.addView(addButton, matchWidth())
-        root.addView(Button(this).apply { text = "Сохранить и вернуться"; setOnClickListener { saveSettings(); finish() } }, matchWidth())
+        root.addView(Button(this).apply { text = "Сохранить"; setOnClickListener { saveSettings(); finish() } }, matchWidth())
         setContentView(root); renderUnifiedEntries()
         enabledSwitch.setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean(KEY_ENABLED, checked).apply(); markRestartPending(); setRoutingOptionsEnabled(checked) }
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
