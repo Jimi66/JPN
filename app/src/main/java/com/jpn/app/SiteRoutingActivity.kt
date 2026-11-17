@@ -105,9 +105,9 @@ class SiteRoutingActivity : Activity() {
         routingBody.addView(entriesContainer, matchWidth()); routingScroll.addView(routingBody)
         root.addView(routingScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addButton = createSoftCapsuleButton("Добавить") { showAddMenu() }
-        root.addView(addButton, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(6); bottomMargin = dp(8) })
+        root.addView(addButton, LinearLayout.LayoutParams(-1, dp(38)).apply { topMargin = dp(6); bottomMargin = dp(8) })
         root.addView(createSoftCapsuleButton("Сохранить") { saveSettings(); finish() },
-            LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
+            LinearLayout.LayoutParams(-1, dp(38)).apply { bottomMargin = dp(8) })
         setContentView(root); renderUnifiedEntries()
         enabledSwitch.setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean(KEY_ENABLED, checked).apply(); markRestartPending(); setRoutingOptionsEnabled(checked) }
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
@@ -143,7 +143,7 @@ class SiteRoutingActivity : Activity() {
             background = states
             stateListAnimator = null
             elevation = dp(2).toFloat()
-            minHeight = dp(76)
+            minHeight = dp(38)
             setPadding(dp(18), 0, dp(18), 0)
             setOnClickListener { action() }
         }
