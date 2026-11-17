@@ -5,6 +5,10 @@ plugins {
 
 android {
     namespace = "com.jpn.app"
+
+    buildFeatures {
+        buildConfig = true
+    }
     compileSdk = 35
 
     defaultConfig {
