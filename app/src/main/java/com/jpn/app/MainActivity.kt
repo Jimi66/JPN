@@ -679,15 +679,19 @@ class MainActivity : Activity() {
 
     private fun formatSubscriptionTraffic(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
+        // 3x-ui sends: upload=N; download=N; total=N; expire=N.
+        // total=0 is a valid unlimited plan, not missing traffic data.
         val fields = raw.split(Regex("\\s*[,;]\\s*")).mapNotNull { item ->
             val pair = item.split("=", limit = 2)
             if (pair.size != 2) null else pair[0].trim().lowercase() to pair[1].trim().toLongOrNull()
         }.toMap()
-        val uploaded = fields["upload"] ?: return null
-        val downloaded = fields["download"] ?: return null
-        val total = fields["total"]?.takeIf { it > 0L } ?: return null
-        if (uploaded < 0L || downloaded < 0L) return null
+        val uploaded = fields["upload"]?.takeIf { it >= 0L } ?: return null
+        val downloaded = fields["download"]?.takeIf { it >= 0L } ?: return null
+        val total = fields["total"]?.takeIf { it >= 0L } ?: return null
         val used = (uploaded.toDouble() + downloaded.toDouble()).toLong()
+        if (total == 0L) {
+            return "Использовано: ${formatTrafficBytes(used)} · безлимит"
+        }
         val percent = (used.toDouble() * 100.0 / total.toDouble()).toInt()
         return "Использовано: ${formatTrafficBytes(used)} из ${formatTrafficBytes(total)} · $percent%"
     }
