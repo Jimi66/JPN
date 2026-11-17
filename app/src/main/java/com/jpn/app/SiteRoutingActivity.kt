@@ -104,7 +104,7 @@ class SiteRoutingActivity : Activity() {
         entriesContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         routingBody.addView(entriesContainer, matchWidth()); routingScroll.addView(routingBody)
         root.addView(routingScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addButton = Button(this).apply { text = "+ Добавить"; minHeight = dp(50); setOnClickListener { showAddMenu() } }
+        addButton = Button(this).apply { text = "Добавить"; minHeight = dp(50); setOnClickListener { showAddMenu() } }
         root.addView(addButton, matchWidth())
         root.addView(Button(this).apply { text = "Сохранить и вернуться"; setOnClickListener { saveSettings(); finish() } }, matchWidth())
         setContentView(root); renderUnifiedEntries()
