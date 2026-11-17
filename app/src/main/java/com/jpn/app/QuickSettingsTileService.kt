@@ -210,12 +210,15 @@ class QuickSettingsTileService : TileService() {
         val connecting = state == "connecting"
         val disconnecting = state == "disconnecting"
 
-        tile.label = if (connected) preferences.getString("vpn_server_name", "JPN") ?: "JPN" else "JPN"
+        val serverName = preferences.getString("vpn_server_name", "JPN")?.takeIf { it.isNotBlank() } ?: "JPN"
+        tile.label = if (connected) serverName else "JPN"
         tile.icon = Icon.createWithResource(this, R.drawable.jpn_power_symbol)
         tile.state = if (connected || connecting) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = when {
-                connected -> "Подключено"
+                // Keep the server name in the live subtitle as well. Some System UI
+                // implementations cache the primary tile label until the shade reopens.
+                connected -> serverName
                 connecting -> "Подключение…"
                 disconnecting -> "Отключение…"
                 state == "error" -> "Ошибка"
