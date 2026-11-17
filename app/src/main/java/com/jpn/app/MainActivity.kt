@@ -166,6 +166,7 @@ class MainActivity : Activity() {
         DefaultSiteRoutingRules.ensure(this)
         GeoDatabaseInstaller.ensure(this)
         restoreSavedSubscription()
+        AutoSubscriptionScheduler.update(this)
         refreshVpnState()
         if (nodes.isEmpty()) {
             android.app.AlertDialog.Builder(this)
@@ -612,6 +613,7 @@ class MainActivity : Activity() {
                         .putString(KEY_SUBSCRIPTION_TRAFFIC, downloadedSubscriptionTraffic)
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
+                    AutoSubscriptionScheduler.update(this@MainActivity)
                     renderNodes()
                     loadSubscriptionButton.isEnabled = true
                     refreshVpnState()
@@ -1086,6 +1088,7 @@ class MainActivity : Activity() {
                     .remove(KEY_SUBSCRIPTION_TRAFFIC)
                     .remove(KEY_SAVED_NODES)
                     .apply()
+                AutoSubscriptionScheduler.update(this@MainActivity)
                 subscriptionInput.setText("")
                 nodes.clear()
                 renderNodes()
