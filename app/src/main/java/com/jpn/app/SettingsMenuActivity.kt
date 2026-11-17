@@ -75,8 +75,8 @@ class SettingsMenuActivity : Activity() {
         addDivider(generalItems, borderColor)
         addSubItem(generalItems, "О приложении", textColor, secondaryColor) {
             android.app.AlertDialog.Builder(this)
-                .setTitle("JPN")
-                .setMessage("Версия ${BuildConfig.VERSION_NAME}")
+                .setTitle("О приложении")
+                .setMessage("Stephani GTP\nAlex Dzh")
                 .setPositiveButton("ОК", null)
                 .show()
         }
