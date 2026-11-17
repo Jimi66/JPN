@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -12,6 +13,8 @@ import android.widget.TextView
 
 class SettingsMenuActivity : Activity() {
     private var renderedDark: Boolean? = null
+    private var easterEggTapCount = 0
+    private var lastEasterEggTap = 0L
 
     override fun onResume() {
         super.onResume()
@@ -74,12 +77,42 @@ class SettingsMenuActivity : Activity() {
         }
         content.addView(tunItems, sectionParams())
 
+        // Keep the discreet credits and the seven-tap video easter egg
+        // at the bottom of the settings screen.
+        content.addView(View(this), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        content.addView(TextView(this).apply {
+            text = "Created by Stephani GPT & Alex Dzh "
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF9A9AA0.toInt())
+            setPadding(0, dp(8), 0, dp(4))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { handleEasterEggTap() }
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             addView(content)
         }
         setContentView(scroll)
         JpnTheme.apply(this, scroll)
+    }
+
+    private fun handleEasterEggTap() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastEasterEggTap > 2500L) easterEggTapCount = 0
+        lastEasterEggTap = now
+        easterEggTapCount++
+
+        if (easterEggTapCount >= 7) {
+            easterEggTapCount = 0
+            startActivity(Intent(this, EasterEggActivity::class.java))
+        }
     }
 
     private fun sectionTitle(title: String, color: Int) = TextView(this).apply {
