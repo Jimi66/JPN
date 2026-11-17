@@ -56,7 +56,21 @@ class SettingsMenuActivity : Activity() {
         content.addView(sectionTitle("Общие настройки", textColor))
         val generalItems = sectionCard(cardColor, borderColor)
         addSubItem(generalItems, "Тема интерфейса", textColor, secondaryColor) {
-            startActivity(Intent(this, GeneralSettingsActivity::class.java))
+            val labels = arrayOf("Как в системе", "Светлая", "Тёмная")
+            val values = arrayOf(JpnTheme.SYSTEM, JpnTheme.LIGHT, JpnTheme.DARK)
+            val prefs = getSharedPreferences("jpn_settings", MODE_PRIVATE)
+            val selected = values.indexOf(
+                prefs.getString("interface_theme", JpnTheme.SYSTEM)
+            ).coerceAtLeast(0)
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Тема интерфейса")
+                .setSingleChoiceItems(labels, selected) { dialog, which ->
+                    prefs.edit().putString("interface_theme", values[which]).apply()
+                    dialog.dismiss()
+                    recreate()
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
         }
         content.addView(generalItems, sectionParams())
 
