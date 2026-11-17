@@ -16,8 +16,8 @@ class SettingsActivity : Activity() {
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
+        JpnTheme.applyBeforeCreate(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
