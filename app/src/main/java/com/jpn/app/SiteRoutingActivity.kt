@@ -454,8 +454,8 @@ class SiteRoutingActivity : Activity() {
     }
 
     private fun fieldBackground() = android.graphics.drawable.GradientDrawable().apply {
-        setColor(JpnTheme.surface(this)); cornerRadius = dp(10).toFloat()
-        setStroke(dp(1), JpnTheme.border(this))
+        setColor(JpnTheme.surface(this@SiteRoutingActivity)); cornerRadius = dp(10).toFloat()
+        setStroke(dp(1), JpnTheme.border(this@SiteRoutingActivity))
     }
 
     private fun matchWidth() = LinearLayout.LayoutParams(-1, -2)
