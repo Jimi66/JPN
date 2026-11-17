@@ -72,14 +72,6 @@ class SettingsMenuActivity : Activity() {
                 .setNegativeButton("Отмена", null)
                 .show()
         }
-        addDivider(generalItems, borderColor)
-        addSubItem(generalItems, "О приложении", textColor, secondaryColor) {
-            android.app.AlertDialog.Builder(this)
-                .setTitle("О приложении")
-                .setMessage("Stephani GPT\nAlex Dzh")
-                .setPositiveButton("ОК", null)
-                .show()
-        }
         content.addView(generalItems, sectionParams())
 
         content.addView(sectionTitle("Настройки TUN модуля", textColor).apply {
