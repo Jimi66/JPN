@@ -51,7 +51,7 @@ class SubscriptionAutoUpdateActivity : Activity() {
             text = "Обновлять автоматически"; textSize = 16f; setTextColor(primary)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         toggleRow.addView(Switch(this).apply {
-            isChecked = prefs.getBoolean(KEY_ENABLED, false)
+            isChecked = prefs.getBoolean(KEY_ENABLED, true)
             setOnCheckedChangeListener { _, checked ->
                 prefs.edit().putBoolean(KEY_ENABLED, checked).apply()
                 AutoSubscriptionScheduler.update(this@SubscriptionAutoUpdateActivity)
