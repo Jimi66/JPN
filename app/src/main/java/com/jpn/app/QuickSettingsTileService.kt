@@ -75,6 +75,8 @@ class QuickSettingsTileService : TileService() {
             }
 
             var outbound = JSONObject(nodes.getJSONObject(selectedIndex).toString())
+            val serverName = outbound.optString("tag").ifBlank { "Сервер ${selectedIndex + 1}" }
+            preferences.edit().putString("vpn_server_name", serverName).apply()
             val rawShareLink = outbound.optString("jpnRawShareLink")
             if (rawShareLink.isNotBlank()) {
                 val parsedResponse = JSONObject(
@@ -208,7 +210,7 @@ class QuickSettingsTileService : TileService() {
         val connecting = state == "connecting"
         val disconnecting = state == "disconnecting"
 
-        tile.label = "JPN"
+        tile.label = if (connected) preferences.getString("vpn_server_name", "JPN") ?: "JPN" else "JPN"
         tile.icon = Icon.createWithResource(this, R.drawable.jpn_power_symbol)
         tile.state = if (connected || connecting) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
