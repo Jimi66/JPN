@@ -360,78 +360,8 @@ class SiteRoutingActivity : Activity() {
         }
     }
 
-    // GeoSiteList and GeoIPList are protobuf messages. Each outer field #1 is
-    // a record; field #1 inside that record is its category/country code.
-    private fun readCategories(file: File): List<String> {
-        if (!file.isFile || file.length() < 8) return emptyList()
-        return runCatching {
-            val bytes = file.readBytes()
-            val result = linkedSetOf<String>()
-            var offset = 0
-            while (offset < bytes.size) {
-                val (tag, afterTag) = readVarint(bytes, offset)
-                offset = afterTag
-                val field = (tag ushr 3).toInt()
-                val wire = (tag and 7).toInt()
-                when (wire) {
-                    0 -> offset = readVarint(bytes, offset).second
-                    1 -> offset += 8
-                    2 -> {
-                        val (length, afterLength) = readVarint(bytes, offset)
-                        offset = afterLength
-                        val size = length.toInt()
-                        if (size < 0 || offset + size > bytes.size) throw IllegalArgumentException("bad protobuf")
-                        if (field == 1) {
-                            val name = firstStringField(bytes, offset, size)
-                            if (name != null && name.matches(Regex("[A-Za-z0-9_-]{1,80}"))) result.add(name)
-                        }
-                        offset += size
-                    }
-                    5 -> offset += 4
-                    else -> throw IllegalArgumentException("unknown protobuf wire type")
-                }
-                if (offset > bytes.size) throw IllegalArgumentException("truncated protobuf")
-            }
-            result.sorted()
-        }.getOrDefault(emptyList())
-    }
-
-    private fun firstStringField(bytes: ByteArray, start: Int, size: Int): String? {
-        var offset = start
-        val end = start + size
-        while (offset < end) {
-            val (tag, next) = readVarint(bytes, offset); offset = next
-            val field = (tag ushr 3).toInt()
-            when ((tag and 7).toInt()) {
-                0 -> offset = readVarint(bytes, offset).second
-                1 -> offset += 8
-                2 -> {
-                    val (length, afterLength) = readVarint(bytes, offset); offset = afterLength
-                    val count = length.toInt()
-                    if (count < 0 || offset + count > end) return null
-                    if (field == 1) return String(bytes, offset, count, Charsets.UTF_8)
-                    offset += count
-                }
-                5 -> offset += 4
-                else -> return null
-            }
-            if (offset > end) return null
-        }
-        return null
-    }
-
-    private fun readVarint(bytes: ByteArray, start: Int): Pair<Long, Int> {
-        var value = 0L
-        var shift = 0
-        var offset = start
-        while (offset < bytes.size && shift < 64) {
-            val b = bytes[offset++].toInt() and 0xFF
-            value = value or ((b and 0x7F).toLong() shl shift)
-            if ((b and 0x80) == 0) return value to offset
-            shift += 7
-        }
-        throw IllegalArgumentException("invalid protobuf varint")
-    }
+    private fun readCategories(file: File): List<String> =
+        GeoDatabaseReader.readCategories(file)
 
     private fun snapshot(): String = buildString {
         append(enabledSwitch.isChecked).append("|")
