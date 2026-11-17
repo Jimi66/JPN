@@ -198,6 +198,34 @@ class SiteRoutingActivity : Activity() {
         renderManualRules(KEY_DOMAINS, domainsContainer, "домен")
         renderManualRules(KEY_IPS, ipsContainer, "IP-адрес или подсеть")
         refreshGeoSummaries()
+        enabledSwitch.setOnCheckedChangeListener { _, checked ->
+            setRoutingOptionsEnabled(checked)
+        }
+        setRoutingOptionsEnabled(enabledSwitch.isChecked)
+    }
+
+    private fun setRoutingOptionsEnabled(enabled: Boolean) {
+        fun update(view: View) {
+            view.isEnabled = enabled
+            if (view is LinearLayout) {
+                for (index in 0 until view.childCount) update(view.getChildAt(index))
+            }
+        }
+        // The master switch and navigation/save controls stay available.
+        update(findBodyContainer())
+        findScrollContainer()?.isEnabled = enabled
+        findBodyContainer().alpha = if (enabled) 1f else 0.45f
+    }
+
+    private fun findBodyContainer(): LinearLayout {
+        val root = findViewById<LinearLayout>(android.R.id.content).getChildAt(0) as LinearLayout
+        val scroll = root.getChildAt(root.childCount - 2) as ScrollView
+        return scroll.getChildAt(0) as LinearLayout
+    }
+
+    private fun findScrollContainer(): ScrollView? {
+        val root = findViewById<LinearLayout>(android.R.id.content).getChildAt(0) as LinearLayout
+        return root.getChildAt(root.childCount - 2) as? ScrollView
     }
 
     private fun summaryText() = TextView(this).apply {
