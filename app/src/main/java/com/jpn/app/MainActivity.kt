@@ -662,6 +662,30 @@ class MainActivity : Activity() {
         return repaired ?: usable(value)
     }
 
+    private fun formatSubscriptionTraffic(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val fields = raw.split(Regex("\\s*[,;]\\s*")).mapNotNull { item ->
+            val pair = item.split("=", limit = 2)
+            if (pair.size != 2) null else pair[0].trim().lowercase() to pair[1].trim().toLongOrNull()
+        }.toMap()
+        val uploaded = fields["upload"] ?: return null
+        val downloaded = fields["download"] ?: return null
+        val total = fields["total"]?.takeIf { it > 0L } ?: return null
+        if (uploaded < 0L || downloaded < 0L) return null
+        val used = (uploaded.toDouble() + downloaded.toDouble()).toLong()
+        val percent = (used.toDouble() * 100.0 / total.toDouble()).toInt()
+        return "Использовано: ${formatTrafficBytes(used)} из ${formatTrafficBytes(total)} · $percent%"
+    }
+
+    private fun formatTrafficBytes(bytes: Long): String {
+        val units = arrayOf("Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ")
+        var value = bytes.toDouble()
+        var unit = 0
+        while (value >= 1024.0 && unit < units.lastIndex) { value /= 1024.0; unit++ }
+        val digits = if (unit == 0 || value >= 100.0) 0 else if (value >= 10.0) 1 else 2
+        return "%.${digits}f %s".format(java.util.Locale.getDefault(), value, units[unit])
+    }
+
     private fun decodeAnnouncement(raw: String): String? {
         val value = raw.trim()
         if (value.isBlank()) return null
