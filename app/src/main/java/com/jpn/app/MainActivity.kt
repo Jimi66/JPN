@@ -157,8 +157,11 @@ class MainActivity : Activity() {
     }
 
     private var appliedDarkTheme: Boolean = false
+    private var launchedFromQuickSettings: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        launchedFromQuickSettings = intent?.action == ACTION_QUICK_SETTINGS_TOGGLE
+        if (launchedFromQuickSettings) setTheme(R.style.JpnVpnConsentTheme)
         super.onCreate(savedInstanceState)
         JpnTheme.applyBeforeCreate(this)
         appliedDarkTheme = JpnTheme.isDark(this)
@@ -170,7 +173,7 @@ class MainActivity : Activity() {
         AutoSubscriptionScheduler.update(this)
         refreshVpnState()
         handleQuickSettingsIntent(intent)
-        if (nodes.isEmpty()) {
+        if (nodes.isEmpty() && !launchedFromQuickSettings) {
             android.app.AlertDialog.Builder(this)
                 .setTitle("Серверы не добавлены")
                 .setMessage("Нажмите «+», чтобы добавить подписку.")
@@ -1540,6 +1543,7 @@ class MainActivity : Activity() {
         } else {
             setStatus("Разрешение Android VPN не предоставлено")
         }
+        if (launchedFromQuickSettings) finish()
     }
 
     private fun handleQuickSettingsIntent(intent: Intent?) {
