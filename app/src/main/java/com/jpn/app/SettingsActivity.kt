@@ -115,7 +115,7 @@ class SettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
         root.addView(TextView(this).apply {
-            text = "Stephanie GPT & Alex DZH"
+            text = "Created by stephani GPT & Alex Dzh "
             textSize = 11f
             gravity = Gravity.CENTER
             setTextColor(0xFF9A9AA0.toInt())
