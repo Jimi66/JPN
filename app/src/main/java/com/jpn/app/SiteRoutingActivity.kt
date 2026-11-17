@@ -166,14 +166,10 @@ class SiteRoutingActivity : Activity() {
         sectionTitle(body, "Базы GeoSite и GeoIP")
         geositeUrl = urlInput(body, "URL GeoSite", KEY_GEOSITE_URL, GEO_DEFAULT + "geosite.dat")
         geoipUrl = urlInput(body, "URL GeoIP", KEY_GEOIP_URL, GEO_DEFAULT + "geoip.dat")
-        val downloads = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        downloads.addView(Button(this).apply {
-            text = "Обновить GeoSite"; setOnClickListener { downloadGeoFile(geositeUrl.text.toString(), "geosite.dat") }
-        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(4) })
-        downloads.addView(Button(this).apply {
-            text = "Обновить GeoIP"; setOnClickListener { downloadGeoFile(geoipUrl.text.toString(), "geoip.dat") }
-        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(4) })
-        body.addView(downloads, matchWidth())
+        body.addView(Button(this).apply {
+            text = "Обновить базы GeoSite и GeoIP"
+            setOnClickListener { downloadGeoFiles() }
+        }, matchWidth())
 
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(Button(this).apply {
@@ -344,57 +340,88 @@ class SiteRoutingActivity : Activity() {
         }
     }
 
-    private fun downloadGeoFile(address: String, fileName: String) {
-        val url = address.trim()
-        if (!url.startsWith("https://", true) && !url.startsWith("http://", true)) {
-            Toast.makeText(this, "Укажи корректный HTTP(S) URL", Toast.LENGTH_LONG).show()
+    private fun downloadGeoFiles() {
+        val geositeAddress = geositeUrl.text.toString().trim()
+        val geoipAddress = geoipUrl.text.toString().trim()
+        fun validHttpUrl(value: String) =
+            value.startsWith("https://", true) || value.startsWith("http://", true)
+        if (!validHttpUrl(geositeAddress) || !validHttpUrl(geoipAddress)) {
+            Toast.makeText(this, "Проверь оба HTTP(S) URL GeoSite и GeoIP", Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(this, "Загружаю $fileName…", Toast.LENGTH_SHORT).show()
+
+        Toast.makeText(this, "Загружаю GeoSite и GeoIP…", Toast.LENGTH_SHORT).show()
         Thread {
-            var connection: HttpURLConnection? = null
-            try {
-                connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 20000; readTimeout = 60000; instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "JPN-Android")
-                }
-                if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
-                val temp = File(filesDir, "$fileName.tmp")
-                connection.inputStream.use { input ->
-                    temp.outputStream().use { output ->
-                        val buffer = ByteArray(32 * 1024)
-                        var total = 0L
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            total += count
-                            if (total > 100L * 1024 * 1024) throw IllegalStateException("Файл больше 100 МБ")
-                            output.write(buffer, 0, count)
-                        }
-                        if (total < 1024) throw IllegalStateException("Файл слишком маленький")
-                    }
-                }
-                val categoryCount = readCategories(temp).size
-                if (categoryCount == 0) throw IllegalStateException("Не удалось прочитать категории из Geo-базы")
-                val target = File(filesDir, fileName)
-                val backup = File(filesDir, "$fileName.bak")
-                backup.delete()
-                if (target.exists() && !target.renameTo(backup)) throw IllegalStateException("Не удалось сохранить старую базу")
-                if (!temp.renameTo(target)) {
-                    if (backup.exists()) backup.renameTo(target)
-                    throw IllegalStateException("Не удалось заменить базу")
-                }
-                backup.delete()
-                runOnUiThread {
-                    markRestartPending()
-                    refreshGeoSummaries()
-                    Toast.makeText(this, "$fileName обновлена: категорий $categoryCount. Применится после переподключения VPN.", Toast.LENGTH_LONG).show()
-                }
-            } catch (error: Exception) {
-                File(filesDir, "$fileName.tmp").delete()
-                runOnUiThread { Toast.makeText(this, "Ошибка загрузки $fileName: ${error.message}", Toast.LENGTH_LONG).show() }
-            } finally { connection?.disconnect() }
+            val results = listOf(
+                "GeoSite" to runCatching { downloadGeoFileNow(geositeAddress, "geosite.dat") },
+                "GeoIP" to runCatching { downloadGeoFileNow(geoipAddress, "geoip.dat") }
+            )
+            val succeeded = results.filter { it.second.isSuccess }
+            val failed = results.filter { it.second.isFailure }
+            runOnUiThread {
+                if (succeeded.isNotEmpty()) markRestartPending()
+                refreshGeoSummaries()
+                val details = buildList {
+                    succeeded.forEach { add("${it.first}: обновлена (${it.second.getOrThrow()} категорий)") }
+                    failed.forEach { add("${it.first}: ошибка — ${it.second.exceptionOrNull()?.message ?: "неизвестная ошибка"}") }
+                }.joinToString("\\n")
+                Toast.makeText(
+                    this,
+                    if (failed.isEmpty()) "Обе базы успешно обновлены. Изменения применятся после переподключения VPN."
+                    else details,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }.start()
+    }
+
+    private fun downloadGeoFileNow(address: String, fileName: String): Int {
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(address).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 20000
+                readTimeout = 60000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "JPN-Android")
+            }
+            if (connection.responseCode !in 200..299) {
+                throw IllegalStateException("HTTP ${connection.responseCode}")
+            }
+            val temp = File(filesDir, "$fileName.tmp")
+            connection.inputStream.use { input ->
+                temp.outputStream().use { output ->
+                    val buffer = ByteArray(32 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > 100L * 1024 * 1024) throw IllegalStateException("Файл больше 100 МБ")
+                        output.write(buffer, 0, count)
+                    }
+                    if (total < 1024) throw IllegalStateException("Файл слишком маленький")
+                }
+            }
+            val categoryCount = readCategories(temp).size
+            if (categoryCount == 0) throw IllegalStateException("Не удалось прочитать категории из Geo-базы")
+            val target = File(filesDir, fileName)
+            val backup = File(filesDir, "$fileName.bak")
+            backup.delete()
+            if (target.exists() && !target.renameTo(backup)) {
+                throw IllegalStateException("Не удалось сохранить старую базу")
+            }
+            if (!temp.renameTo(target)) {
+                if (backup.exists()) backup.renameTo(target)
+                throw IllegalStateException("Не удалось заменить базу")
+            }
+            backup.delete()
+            return categoryCount
+        } catch (error: Exception) {
+            File(filesDir, "$fileName.tmp").delete()
+            throw error
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     // GeoSiteList and GeoIPList are protobuf messages. Each outer field #1 is
