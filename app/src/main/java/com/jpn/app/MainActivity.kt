@@ -81,6 +81,7 @@ class MainActivity : Activity() {
 
         private const val KEY_SUBSCRIPTION_URL = "subscription_url"
         private const val KEY_SUBSCRIPTION_NAME = "subscription_name"
+        private const val KEY_SUBSCRIPTION_ANNOUNCE = "subscription_announce"
         private const val KEY_SUBSCRIPTION_CONTENT = "subscription_content"
         private const val KEY_SAVED_NODES = "saved_nodes_json"
         private const val KEY_VPN_STATE = "vpn_state"
@@ -98,6 +99,7 @@ class MainActivity : Activity() {
     private lateinit var loadSubscriptionButton: Button
     private lateinit var nodesContainer: ListView
     private lateinit var nodesHeader: TextView
+    private lateinit var subscriptionAnnouncementView: TextView
     private lateinit var vpnButton: ImageButton
     private lateinit var addSubscriptionButton: Button
     private var pendingXrayConfig: String? = null
@@ -114,6 +116,7 @@ class MainActivity : Activity() {
     @Volatile private var lastTestVpnError: String? = null
     @Volatile private var testVpnStopCompleted = false
     @Volatile private var downloadedSubscriptionName: String? = null
+    @Volatile private var downloadedSubscriptionAnnouncement: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -298,7 +301,21 @@ class MainActivity : Activity() {
         nodesHeader = TextView(this).apply {
             text = "Серверы пока не добавлены"
             textSize = 16f
-            setPadding(dp(12), dp(12), dp(4), dp(8))
+            setPadding(0, 0, 0, 0)
+        }
+        subscriptionAnnouncementView = TextView(this).apply {
+            textSize = 11f
+            setTextColor(0xFF73777D.toInt())
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = android.view.View.GONE
+        }
+        val subscriptionHeaderTexts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(4), dp(10))
+            addView(nodesHeader, matchWidth())
+            addView(subscriptionAnnouncementView, matchWidth())
         }
         val nodesMenuButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_subscription_edit)
@@ -381,7 +398,7 @@ class MainActivity : Activity() {
         val nodesHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(nodesHeader, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(subscriptionHeaderTexts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(pingButton, LinearLayout.LayoutParams(dp(36), dp(36)))
             addView(refreshSubscriptionButton, LinearLayout.LayoutParams(dp(36), dp(36)))
             addView(nodesMenuButton, LinearLayout.LayoutParams(dp(36), dp(36)))
@@ -542,9 +559,11 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val body = downloadSubscription(subscriptionUrl)
+                val bodyMetadata = extractAnnouncementFromBody(body)
+                val subscriptionAnnouncement = downloadedSubscriptionAnnouncement ?: bodyMetadata.second
                 val subscriptionName = downloadedSubscriptionName
                     ?: runCatching { URL(subscriptionUrl).host }.getOrNull()?.takeIf { it.isNotBlank() }
-                val subscriptionText = decodeSubscriptionBody(body)
+                val subscriptionText = decodeSubscriptionBody(bodyMetadata.first)
                 val imported = parseSubscriptionEntries(subscriptionText)
                 mainHandler.post {
                     nodes.clear()
@@ -552,6 +571,7 @@ class MainActivity : Activity() {
                     preferences.edit()
                         .putString(KEY_SUBSCRIPTION_CONTENT, subscriptionText)
                         .putString(KEY_SUBSCRIPTION_NAME, subscriptionName)
+                        .putString(KEY_SUBSCRIPTION_ANNOUNCE, subscriptionAnnouncement)
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     renderNodes()
@@ -601,6 +621,8 @@ class MainActivity : Activity() {
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
             downloadedSubscriptionName = profileTitle?.let { decodeProfileTitle(it) }
+            downloadedSubscriptionAnnouncement = connection.getHeaderField("announce")
+                ?.let { decodeAnnouncement(it) }
             return String(output.toByteArray(), StandardCharsets.UTF_8)
         } finally {
             connection.disconnect()
@@ -638,6 +660,30 @@ class MainActivity : Activity() {
             usable(String(bytes, StandardCharsets.UTF_8))
         }.getOrNull()
         return repaired ?: usable(value)
+    }
+
+    private fun decodeAnnouncement(raw: String): String? {
+        val value = raw.trim()
+        if (value.isBlank()) return null
+        val decoded = if (value.startsWith("base64:", ignoreCase = true)) {
+            val payload = value.substringAfter(":").filterNot { it.isWhitespace() }
+            runCatching {
+                String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8).trim()
+            }.getOrNull()
+        } else value
+        return decoded?.takeIf { it.isNotBlank() && it.none { ch -> ch == '\u0000' } }?.take(500)
+    }
+
+    private fun extractAnnouncementFromBody(body: String): Pair<String, String?> {
+        var announcement: String? = null
+        val cleaned = body.lineSequence().filter { line ->
+            val trimmed = line.trim()
+            if (trimmed.startsWith("#announce:", ignoreCase = true)) {
+                announcement = decodeAnnouncement(trimmed.substringAfter(":"))
+                false
+            } else true
+        }.joinToString("\n")
+        return cleaned to announcement
     }
 
     private fun decodeSubscriptionBody(body: String): String {
@@ -1171,6 +1217,10 @@ class MainActivity : Activity() {
                 }.getOrNull()?.takeIf { it.isNotBlank() }
                 ?: "Подписка"
         }
+
+        val announcement = preferences.getString(KEY_SUBSCRIPTION_ANNOUNCE, null).orEmpty().trim()
+        subscriptionAnnouncementView.text = announcement
+        subscriptionAnnouncementView.visibility = if (nodes.isNotEmpty() && announcement.isNotBlank()) android.view.View.VISIBLE else android.view.View.GONE
 
         selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
         nodesContainer.adapter = object : android.widget.BaseAdapter() {
