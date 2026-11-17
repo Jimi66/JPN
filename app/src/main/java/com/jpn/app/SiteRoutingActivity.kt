@@ -67,7 +67,7 @@ class SiteRoutingActivity : Activity() {
                     when {
                         entry.startsWith("geosite:", true) -> geosites.add(entry.substringAfter(":").trim())
                         entry.startsWith("geoip:", true) -> geoips.add(entry.substringAfter(":").trim())
-                        entry.matches(Regex("""^(?:\\d{1,3}\\.){3}\\d{1,3}(?:/\\d{1,2})?$""")) ||
+                        entry.matches(Regex("""^(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?$""")) ||
                             entry.contains(":") -> ips.add(entry)
                         else -> domains.add(entry.removePrefix("domain:"))
                     }
