@@ -11,6 +11,10 @@ import android.widget.Toast
 
 class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
 
+    companion object {
+        const val EXTRA_VIDEO_RESOURCE = "easter_egg_video_resource"
+    }
+
     private lateinit var textureView: TextureView
     private lateinit var videoContainer: FrameLayout
     private var mediaPlayer: MediaPlayer? = null
@@ -54,7 +58,8 @@ class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
         if (mediaPlayer != null || surface == null || isFinishing) return
 
         try {
-            val descriptor = resources.openRawResourceFd(R.raw.easter_egg)
+            val videoResource = intent.getIntExtra(EXTRA_VIDEO_RESOURCE, R.raw.easter_egg)
+            val descriptor = resources.openRawResourceFd(videoResource)
             val player = MediaPlayer()
             mediaPlayer = player
             player.setSurface(surface)
