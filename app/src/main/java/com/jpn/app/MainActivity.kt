@@ -156,8 +156,8 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
+        JpnTheme.applyBeforeCreate(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
         DefaultSiteRoutingRules.ensure(this)
