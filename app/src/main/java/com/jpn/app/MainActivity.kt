@@ -636,6 +636,7 @@ class MainActivity : Activity() {
             connection.readTimeout = 20000
             connection.requestMethod = "GET"
             connection.setRequestProperty("User-Agent", "JPN/0.4.0")
+            SubscriptionRequestHeaders.apply(this@MainActivity, connection)
             connection.setRequestProperty("Accept", "text/plain, application/json, */*")
             val code = connection.responseCode
             if (code !in 200..299) {

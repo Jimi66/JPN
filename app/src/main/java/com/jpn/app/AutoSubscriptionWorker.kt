@@ -28,6 +28,7 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                 connection.connectTimeout = 15000; connection.readTimeout = 20000
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("User-Agent", "JPN/0.4.0")
+                SubscriptionRequestHeaders.apply(applicationContext, connection)
                 connection.setRequestProperty("Accept", "text/plain, application/json, */*")
                 val code = connection.responseCode
                 if (code !in 200..299) throw IllegalStateException("HTTP $code")
