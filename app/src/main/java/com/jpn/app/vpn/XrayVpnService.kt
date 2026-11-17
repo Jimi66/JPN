@@ -164,15 +164,16 @@ class XrayVpnService : VpnService() {
                     .put("name", "jpn-tun")
                     .put("mtu", 1500)
             )
-        if (config.has("fakedns")) {
-            tunInbound.put(
-                "sniffing",
-                JSONObject()
-                    .put("enabled", true)
-                    .put("destOverride", JSONArray().put("fakedns"))
-                    .put("metadataOnly", false)
-            )
-        }
+        // Recover destination domains from TLS/HTTP/QUIC traffic so that
+        // GeoSite and manual domain bypass rules work with Android's TUN.
+        tunInbound.put(
+            "sniffing",
+            JSONObject()
+                .put("enabled", true)
+                .put("destOverride", JSONArray().put("http").put("tls").put("quic"))
+                .put("metadataOnly", false)
+                .put("routeOnly", true)
+        )
         inbounds.put(tunInbound)
 
         val request = JSONObject()
