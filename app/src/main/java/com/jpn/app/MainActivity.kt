@@ -1366,14 +1366,24 @@ class MainActivity : Activity() {
                 .distinct().forEach { ips.put(it) }
 
             if (domains.length() > 0 || ips.length() > 0) {
-                val bypassRule = JSONObject()
-                    .put("type", "field")
-                    .put("outboundTag", "jpn-direct")
-                if (domains.length() > 0) bypassRule.put("domain", domains)
-                if (ips.length() > 0) bypassRule.put("ip", ips)
+                val bypassRules = JSONArray()
+                // Xray combines conditions inside one rule with AND semantics,
+                // so domain and IP bypasses must be separate direct rules.
+                if (domains.length() > 0) {
+                    bypassRules.put(JSONObject()
+                        .put("type", "field")
+                        .put("domain", domains)
+                        .put("outboundTag", "jpn-direct"))
+                }
+                if (ips.length() > 0) {
+                    bypassRules.put(JSONObject()
+                        .put("type", "field")
+                        .put("ip", ips)
+                        .put("outboundTag", "jpn-direct"))
+                }
                 config.put("routing", JSONObject()
-                    .put("domainStrategy", "IPIfNonMatch")
-                    .put("rules", JSONArray().put(bypassRule)))
+                    .put("domainStrategy", "AsIs")
+                    .put("rules", bypassRules))
             }
         }
         return config.toString()
