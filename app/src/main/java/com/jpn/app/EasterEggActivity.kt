@@ -12,6 +12,7 @@ import android.widget.Toast
 class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
 
     private lateinit var textureView: TextureView
+    private lateinit var videoContainer: FrameLayout
     private var mediaPlayer: MediaPlayer? = null
     private var surface: Surface? = null
     private var prepared = false
@@ -22,17 +23,22 @@ class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
         super.onCreate(savedInstanceState)
 
         window.decorView.setBackgroundColor(Color.BLACK)
+        videoContainer = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+        }
         textureView = TextureView(this).apply {
             surfaceTextureListener = this@EasterEggActivity
             isOpaque = true
         }
-        setContentView(
+        videoContainer.addView(
             textureView,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                android.view.Gravity.CENTER
             )
         )
+        setContentView(videoContainer)
     }
 
     override fun onSurfaceTextureAvailable(
@@ -72,16 +78,22 @@ class EasterEggActivity : Activity(), TextureView.SurfaceTextureListener {
                 finish()
                 true
             }
-            player.setOnVideoSizeChangedListener { mp, videoWidth, videoHeight ->
+            player.setOnVideoSizeChangedListener { _, videoWidth, videoHeight ->
                 if (videoWidth > 0 && videoHeight > 0) {
-                    val viewWidth = textureView.width.toFloat()
-                    val viewHeight = textureView.height.toFloat()
-                    val videoRatio = videoWidth.toFloat() / videoHeight
-                    val viewRatio = viewWidth / viewHeight
-                    val scaleX = if (videoRatio > viewRatio) 1f else viewRatio / videoRatio
-                    val scaleY = if (videoRatio > viewRatio) videoRatio / viewRatio else 1f
-                    textureView.scaleX = scaleX
-                    textureView.scaleY = scaleY
+                    textureView.surfaceTexture?.setDefaultBufferSize(videoWidth, videoHeight)
+                    val availableWidth = videoContainer.width
+                    val availableHeight = videoContainer.height
+                    if (availableWidth > 0 && availableHeight > 0) {
+                        val scale = minOf(
+                            availableWidth.toFloat() / videoWidth,
+                            availableHeight.toFloat() / videoHeight
+                        )
+                        textureView.layoutParams = FrameLayout.LayoutParams(
+                            (videoWidth * scale).toInt(),
+                            (videoHeight * scale).toInt(),
+                            android.view.Gravity.CENTER
+                        )
+                    }
                 }
             }
             player.setAudioAttributes(
