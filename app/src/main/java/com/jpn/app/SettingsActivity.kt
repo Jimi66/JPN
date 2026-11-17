@@ -78,6 +78,38 @@ class SettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
+        val siteRouting = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(10), dp(12), dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFF4F5F6.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+            foreground = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x26000000),
+                null,
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = dp(14).toFloat()
+                    setColor(android.graphics.Color.WHITE)
+                }
+            )
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, SiteRoutingActivity::class.java))
+            }
+        }
+        siteRouting.addView(TextView(this).apply {
+            text = "Маршрутизация сайтов"
+            textSize = 16f
+            setTextColor(0xFF202124.toInt())
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(siteRouting, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(8) })
+
         // Keep the credits discreetly anchored to the bottom of Settings.
         root.addView(android.view.View(this), LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
