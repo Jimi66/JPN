@@ -133,7 +133,7 @@ class SiteRoutingActivity : Activity() {
 
         if (easterEggTapCount >= 7) {
             easterEggTapCount = 0
-            startActivity(android.content.Intent(this, EasterEggActivity::class.java))
+            startActivity(android.content.Intent(this, EasterEggActivity::class.java).putExtra(EasterEggActivity.EXTRA_VIDEO_RESOURCE, R.raw.easter_egg_routing))
         }
     }
 
