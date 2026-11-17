@@ -46,8 +46,6 @@ class AppRoutingActivity : Activity() {
     private lateinit var searchInput: EditText
     private lateinit var selectedCount: TextView
     private lateinit var modeGroup: RadioGroup
-    private var routingTitleTapCount = 0
-    private var routingTitleLastTapTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,21 +130,6 @@ class AppRoutingActivity : Activity() {
             text = "Включить маршрутизацию приложений"
             textSize = 15f
             setTextColor(0xFF202124.toInt())
-            setOnClickListener {
-                val now = android.os.SystemClock.elapsedRealtime()
-                if (now - routingTitleLastTapTime > 2500L) {
-                    routingTitleTapCount = 0
-                }
-                routingTitleLastTapTime = now
-                routingTitleTapCount++
-                if (routingTitleTapCount >= 7) {
-                    routingTitleTapCount = 0
-                    startActivity(
-                        Intent(this@AppRoutingActivity, EasterEggActivity::class.java)
-                            .putExtra(EasterEggActivity.EXTRA_VIDEO_RESOURCE, R.raw.easter_egg_apps)
-                    )
-                }
-            }
         }
         routingToggleRow.addView(
             routingToggleLabel,
