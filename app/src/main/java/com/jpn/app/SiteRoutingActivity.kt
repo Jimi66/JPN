@@ -104,12 +104,49 @@ class SiteRoutingActivity : Activity() {
         entriesContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         routingBody.addView(entriesContainer, matchWidth()); routingScroll.addView(routingBody)
         root.addView(routingScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addButton = Button(this).apply { text = "Добавить"; minHeight = dp(50); setOnClickListener { showAddMenu() } }
-        root.addView(addButton, matchWidth())
-        root.addView(Button(this).apply { text = "Сохранить"; setOnClickListener { saveSettings(); finish() } }, matchWidth())
+        addButton = createSoftCapsuleButton("Добавить") { showAddMenu() }
+        root.addView(addButton, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(6); bottomMargin = dp(8) })
+        root.addView(createSoftCapsuleButton("Сохранить") { saveSettings(); finish() },
+            LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(8) })
         setContentView(root); renderUnifiedEntries()
         enabledSwitch.setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean(KEY_ENABLED, checked).apply(); markRestartPending(); setRoutingOptionsEnabled(checked) }
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
+    }
+
+    private fun createSoftCapsuleButton(label: String, action: () -> Unit): Button {
+        fun capsule(colors: IntArray, strokeColor: Int, strokeWidth: Int) =
+            android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, colors
+            ).apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = dp(100).toFloat()
+                setStroke(dp(strokeWidth), strokeColor)
+            }
+
+        val normal = android.graphics.drawable.LayerDrawable(arrayOf(
+            capsule(intArrayOf(0xFFF7F7F7.toInt(), 0xFFD0D0D0.toInt()), 0xFFC9C9C9.toInt(), 2),
+            android.graphics.drawable.InsetDrawable(
+                capsule(intArrayOf(0xFFFFFFFF.toInt(), 0xFFE1E1E1.toInt()), 0xFFF4F4F4.toInt(), 2),
+                dp(7)
+            )
+        ))
+        val pressed = capsule(intArrayOf(0xFFE0E0E0.toInt(), 0xFFBDBDBD.toInt()), 0xFFB8B8B8.toInt(), 2)
+        val states = android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), pressed)
+            addState(intArrayOf(), normal)
+        }
+        return Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(0xFF454545.toInt())
+            background = states
+            stateListAnimator = null
+            elevation = dp(2).toFloat()
+            minHeight = dp(76)
+            setPadding(dp(18), 0, dp(18), 0)
+            setOnClickListener { action() }
+        }
     }
 
     private fun showAddMenu() {
