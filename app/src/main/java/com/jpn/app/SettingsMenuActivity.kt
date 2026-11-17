@@ -117,8 +117,9 @@ class SettingsMenuActivity : Activity() {
 
     private fun sectionTitle(title: String, color: Int) = TextView(this).apply {
         text = title
-        textSize = 22f
+        setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
         setTypeface(typeface, Typeface.BOLD)
+        includeFontPadding = false
         setTextColor(color)
         setPadding(0, dp(2), 0, dp(10))
     }
