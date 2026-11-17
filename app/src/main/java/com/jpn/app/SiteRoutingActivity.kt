@@ -42,6 +42,8 @@ class SiteRoutingActivity : Activity() {
     private lateinit var ipsContainer: LinearLayout
     private lateinit var geositeUrl: EditText
     private lateinit var geoipUrl: EditText
+    private lateinit var routingBody: LinearLayout
+    private lateinit var routingScroll: ScrollView
     private var initialSnapshot = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -139,9 +141,10 @@ class SiteRoutingActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(12) })
 
-        val scroll = ScrollView(this)
-        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        scroll.addView(body)
+        routingScroll = ScrollView(this)
+        routingBody = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        routingScroll.addView(routingBody)
+        val body = routingBody
 
         sectionTitle(body, "GeoSite — категории доменов")
         geositeSummary = summaryText()
@@ -189,7 +192,7 @@ class SiteRoutingActivity : Activity() {
             setOnClickListener { downloadGeoFiles() }
         }, matchWidth())
 
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(routingScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(Button(this).apply {
             text = "Сохранить и вернуться"; minHeight = dp(48)
             setOnClickListener { saveSettings(); finish() }
@@ -212,20 +215,9 @@ class SiteRoutingActivity : Activity() {
             }
         }
         // The master switch and navigation/save controls stay available.
-        update(findBodyContainer())
-        findScrollContainer()?.isEnabled = enabled
-        findBodyContainer().alpha = if (enabled) 1f else 0.45f
-    }
-
-    private fun findBodyContainer(): LinearLayout {
-        val root = findViewById<LinearLayout>(android.R.id.content).getChildAt(0) as LinearLayout
-        val scroll = root.getChildAt(root.childCount - 2) as ScrollView
-        return scroll.getChildAt(0) as LinearLayout
-    }
-
-    private fun findScrollContainer(): ScrollView? {
-        val root = findViewById<LinearLayout>(android.R.id.content).getChildAt(0) as LinearLayout
-        return root.getChildAt(root.childCount - 2) as? ScrollView
+        update(routingBody)
+        routingScroll.isEnabled = enabled
+        routingBody.alpha = if (enabled) 1f else 0.45f
     }
 
     private fun summaryText() = TextView(this).apply {
