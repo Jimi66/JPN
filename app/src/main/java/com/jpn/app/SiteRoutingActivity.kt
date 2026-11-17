@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -41,6 +42,8 @@ class SiteRoutingActivity : Activity() {
     private lateinit var routingBody: LinearLayout
     private lateinit var routingScroll: ScrollView
     private var initialSnapshot = ""
+    private var easterEggTapCount = 0
+    private var lastEasterEggTap = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +99,14 @@ class SiteRoutingActivity : Activity() {
         header.addView(TextView(this).apply { text = "Маршрутизация сайтов"; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setTextColor(0xFF202124.toInt()) }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header, matchWidth())
         val toggleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(8), dp(12), dp(8)); background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFFF4F5F6.toInt()); cornerRadius = dp(14).toFloat() } }
-        toggleRow.addView(TextView(this).apply { text = "Включить маршрутизацию сайтов"; textSize = 15f; setTextColor(0xFF202124.toInt()) }, LinearLayout.LayoutParams(0, -2, 1f))
+        toggleRow.addView(TextView(this).apply {
+            text = "Включить маршрутизацию сайтов"
+            textSize = 15f
+            setTextColor(0xFF202124.toInt())
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { handleEasterEggTap() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
         enabledSwitch = Switch(this).apply { isChecked = prefs.getBoolean(KEY_ENABLED, true); contentDescription = "Маршрутизация сайтов включена" }
         toggleRow.addView(enabledSwitch)
         root.addView(toggleRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(12) })
@@ -113,6 +123,18 @@ class SiteRoutingActivity : Activity() {
         renderUnifiedEntries(); JpnTheme.apply(this, root)
         enabledSwitch.setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean(KEY_ENABLED, checked).apply(); markRestartPending(); setRoutingOptionsEnabled(checked) }
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
+    }
+
+    private fun handleEasterEggTap() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastEasterEggTap > 2500L) easterEggTapCount = 0
+        lastEasterEggTap = now
+        easterEggTapCount++
+
+        if (easterEggTapCount >= 7) {
+            easterEggTapCount = 0
+            startActivity(android.content.Intent(this, EasterEggActivity::class.java))
+        }
     }
 
     private fun createSoftCapsuleButton(label: String, action: () -> Unit): Button {
