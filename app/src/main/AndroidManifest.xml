@@ -27,6 +27,10 @@
             android:name=".SettingsActivity"
             android:exported="false" />
         <activity
+            android:name=".EasterEggActivity"
+            android:exported="false"
+            android:screenOrientation="sensor" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
