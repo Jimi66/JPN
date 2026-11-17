@@ -13,4 +13,11 @@
         <item name="android:colorControlNormal">#AEB1BC</item>
         <item name="android:colorControlActivated">#AAA4E0</item>
     </style>
+    <style name="JpnVpnConsentTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
 </resources>
