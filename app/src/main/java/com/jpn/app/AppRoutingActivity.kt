@@ -47,6 +47,7 @@ class AppRoutingActivity : Activity() {
     private lateinit var modeGroup: RadioGroup
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
         selectedPackages.addAll(
             preferences.getStringSet(KEY_ROUTING_PACKAGES, emptySet()) ?: emptySet()
@@ -208,6 +209,7 @@ class AppRoutingActivity : Activity() {
         }
         root.addView(note)
         setContentView(root)
+        JpnTheme.apply(this, root)
 
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit

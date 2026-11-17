@@ -43,6 +43,7 @@ class SiteRoutingActivity : Activity() {
     private var initialSnapshot = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
         migrateLegacyDirectRules()
         buildScreen()
@@ -108,7 +109,8 @@ class SiteRoutingActivity : Activity() {
         root.addView(addButton, LinearLayout.LayoutParams(-1, dp(38)).apply { topMargin = dp(6); bottomMargin = dp(8) })
         root.addView(createSoftCapsuleButton("Сохранить") { saveSettings(); finish() },
             LinearLayout.LayoutParams(-1, dp(38)).apply { bottomMargin = dp(8) })
-        setContentView(root); renderUnifiedEntries()
+        setContentView(root)
+        JpnTheme.apply(this, root); renderUnifiedEntries()
         enabledSwitch.setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean(KEY_ENABLED, checked).apply(); markRestartPending(); setRoutingOptionsEnabled(checked) }
         setRoutingOptionsEnabled(enabledSwitch.isChecked); initialSnapshot = snapshot()
     }

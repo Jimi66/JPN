@@ -156,6 +156,7 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
@@ -534,6 +535,7 @@ class MainActivity : Activity() {
             insets
         }
         setContentView(screen)
+        JpnTheme.apply(this, screen)
     }
 
     private fun showManualSubscriptionDialog() {

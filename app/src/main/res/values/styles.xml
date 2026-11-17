@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="JpnLightTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#706AA5</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <style name="JpnDarkTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#AAA4E0</item>
+        <item name="android:windowBackground">#18191E</item>
+        <item name="android:colorBackground">#18191E</item>
+        <item name="android:textColorPrimary">#EFF0F5</item>
+        <item name="android:textColorSecondary">#AEB1BC</item>
+        <item name="android:colorControlNormal">#AEB1BC</item>
+        <item name="android:colorControlActivated">#AAA4E0</item>
+    </style>
+</resources>
