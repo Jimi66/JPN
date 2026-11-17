@@ -220,6 +220,11 @@ class MainActivity : Activity() {
         connectToOutbound(selected, name)
     }
 
+    private fun applyMainIconTint(button: ImageButton) {
+        val color = if (JpnTheme.isDark(this)) 0xFFF1F1F5.toInt() else 0xFF202124.toInt()
+        button.imageTintList = android.content.res.ColorStateList.valueOf(color)
+    }
+
     private fun buildScreen() {
         val screen = android.widget.FrameLayout(this)
         val root = LinearLayout(this).apply {
@@ -346,6 +351,7 @@ class MainActivity : Activity() {
         }
         val nodesMenuButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_subscription_edit)
+            applyMainIconTint(this)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             contentDescription = "Изменить список серверов"
             tooltipText = "Редактировать подписку"
@@ -389,6 +395,7 @@ class MainActivity : Activity() {
         }
         val refreshSubscriptionButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_subscription_refresh)
+            applyMainIconTint(this)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             contentDescription = "Обновить подписку"
             tooltipText = "Обновить подписку"
@@ -408,6 +415,7 @@ class MainActivity : Activity() {
         }
         val pingButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_ping_speedometer)
+            applyMainIconTint(this)
             contentDescription = "Проверка серверов"
             tooltipText = "Проверка серверов"
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
@@ -509,6 +517,7 @@ class MainActivity : Activity() {
         }
         val settingsButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_settings_gear)
+            applyMainIconTint(this)
             contentDescription = "Настройки"
             val selectableBackground = android.util.TypedValue()
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
