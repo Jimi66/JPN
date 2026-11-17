@@ -50,29 +50,35 @@ class SettingsActivity : Activity() {
             setPadding(0, 0, 0, dp(16))
         })
 
-        val themeCard = LinearLayout(this).apply {
+        val general = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setPadding(dp(16), dp(10), dp(12), dp(10))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xFFF4F5F6.toInt())
                 cornerRadius = dp(14).toFloat()
             }
+            foreground = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x26000000),
+                null,
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = dp(14).toFloat()
+                    setColor(android.graphics.Color.WHITE)
+                }
+            )
             isClickable = true
             isFocusable = true
-            setOnClickListener { showThemePicker() }
+            setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, GeneralSettingsActivity::class.java))
+            }
         }
-        themeCard.addView(TextView(this).apply {
-            text = "Тема интерфейса"
+        general.addView(TextView(this).apply {
+            text = "Общие настройки"
             textSize = 16f
             setTextColor(0xFF202124.toInt())
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        themeCard.addView(TextView(this).apply {
-            text = themeLabel()
-            textSize = 14f
-            setTextColor(0xFF514B83.toInt())
-        })
-        root.addView(themeCard, LinearLayout.LayoutParams(
+        root.addView(general, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(8) })
 

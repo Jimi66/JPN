@@ -24,6 +24,9 @@
             android:name=".SiteRoutingActivity"
             android:exported="false" />
         <activity
+            android:name=".GeneralSettingsActivity"
+            android:exported="false" />
+        <activity
             android:name=".SettingsActivity"
             android:exported="false" />
         <activity
