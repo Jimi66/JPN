@@ -47,8 +47,8 @@ class AppRoutingActivity : Activity() {
     private lateinit var modeGroup: RadioGroup
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        JpnTheme.applyBeforeCreate(this)
         super.onCreate(savedInstanceState)
+        JpnTheme.applyBeforeCreate(this)
         selectedPackages.addAll(
             preferences.getStringSet(KEY_ROUTING_PACKAGES, emptySet()) ?: emptySet()
         )
