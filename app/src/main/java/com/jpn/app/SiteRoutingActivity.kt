@@ -96,7 +96,7 @@ class SiteRoutingActivity : Activity() {
         root.addView(header, matchWidth())
         val toggleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(8), dp(12), dp(8)); background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFFF4F5F6.toInt()); cornerRadius = dp(14).toFloat() } }
         toggleRow.addView(TextView(this).apply { text = "Включить маршрутизацию сайтов"; textSize = 15f; setTextColor(0xFF202124.toInt()) }, LinearLayout.LayoutParams(0, -2, 1f))
-        enabledSwitch = Switch(this).apply { isChecked = prefs.getBoolean(KEY_ENABLED, false); contentDescription = "Маршрутизация сайтов включена" }
+        enabledSwitch = Switch(this).apply { isChecked = prefs.getBoolean(KEY_ENABLED, true); contentDescription = "Маршрутизация сайтов включена" }
         toggleRow.addView(enabledSwitch)
         root.addView(toggleRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(12) })
         routingScroll = ScrollView(this)
