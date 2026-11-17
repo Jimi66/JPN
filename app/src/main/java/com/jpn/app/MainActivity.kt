@@ -82,6 +82,7 @@ class MainActivity : Activity() {
         private const val KEY_SUBSCRIPTION_URL = "subscription_url"
         private const val KEY_SUBSCRIPTION_NAME = "subscription_name"
         private const val KEY_SUBSCRIPTION_ANNOUNCE = "subscription_announce"
+        private const val KEY_SUBSCRIPTION_TRAFFIC = "subscription_traffic"
         private const val KEY_SUBSCRIPTION_CONTENT = "subscription_content"
         private const val KEY_SAVED_NODES = "saved_nodes_json"
         private const val KEY_VPN_STATE = "vpn_state"
@@ -100,6 +101,7 @@ class MainActivity : Activity() {
     private lateinit var nodesContainer: ListView
     private lateinit var nodesHeader: TextView
     private lateinit var subscriptionAnnouncementView: TextView
+    private lateinit var subscriptionTrafficView: TextView
     private lateinit var vpnButton: ImageButton
     private lateinit var addSubscriptionButton: Button
     private var pendingXrayConfig: String? = null
@@ -117,6 +119,7 @@ class MainActivity : Activity() {
     @Volatile private var testVpnStopCompleted = false
     @Volatile private var downloadedSubscriptionName: String? = null
     @Volatile private var downloadedSubscriptionAnnouncement: String? = null
+    @Volatile private var downloadedSubscriptionTraffic: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -310,12 +313,20 @@ class MainActivity : Activity() {
             ellipsize = android.text.TextUtils.TruncateAt.END
             visibility = android.view.View.GONE
         }
+        subscriptionTrafficView = TextView(this).apply {
+            textSize = 11f
+            setTextColor(0xFF73777D.toInt())
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = android.view.View.GONE
+        }
         val subscriptionHeaderTexts = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(4), dp(10))
             addView(nodesHeader, matchWidth())
             addView(subscriptionAnnouncementView, matchWidth())
+            addView(subscriptionTrafficView, matchWidth())
         }
         val nodesMenuButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_subscription_edit)
@@ -572,6 +583,7 @@ class MainActivity : Activity() {
                         .putString(KEY_SUBSCRIPTION_CONTENT, subscriptionText)
                         .putString(KEY_SUBSCRIPTION_NAME, subscriptionName)
                         .putString(KEY_SUBSCRIPTION_ANNOUNCE, subscriptionAnnouncement)
+                        .putString(KEY_SUBSCRIPTION_TRAFFIC, downloadedSubscriptionTraffic)
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     renderNodes()
@@ -623,6 +635,9 @@ class MainActivity : Activity() {
             downloadedSubscriptionName = profileTitle?.let { decodeProfileTitle(it) }
             downloadedSubscriptionAnnouncement = connection.getHeaderField("announce")
                 ?.let { decodeAnnouncement(it) }
+            downloadedSubscriptionTraffic = connection.getHeaderField("subscription-userinfo")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
             return String(output.toByteArray(), StandardCharsets.UTF_8)
         } finally {
             connection.disconnect()
@@ -1037,6 +1052,8 @@ class MainActivity : Activity() {
                 preferences.edit()
                     .remove(KEY_SUBSCRIPTION_URL)
                     .remove(KEY_SUBSCRIPTION_CONTENT)
+                    .remove(KEY_SUBSCRIPTION_ANNOUNCE)
+                    .remove(KEY_SUBSCRIPTION_TRAFFIC)
                     .remove(KEY_SAVED_NODES)
                     .apply()
                 subscriptionInput.setText("")
@@ -1245,6 +1262,10 @@ class MainActivity : Activity() {
         val announcement = preferences.getString(KEY_SUBSCRIPTION_ANNOUNCE, null).orEmpty().trim()
         subscriptionAnnouncementView.text = announcement
         subscriptionAnnouncementView.visibility = if (nodes.isNotEmpty() && announcement.isNotBlank()) android.view.View.VISIBLE else android.view.View.GONE
+
+        val trafficText = formatSubscriptionTraffic(preferences.getString(KEY_SUBSCRIPTION_TRAFFIC, null))
+        subscriptionTrafficView.text = trafficText.orEmpty()
+        subscriptionTrafficView.visibility = if (nodes.isNotEmpty() && trafficText != null) android.view.View.VISIBLE else android.view.View.GONE
 
         selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
         nodesContainer.adapter = object : android.widget.BaseAdapter() {
