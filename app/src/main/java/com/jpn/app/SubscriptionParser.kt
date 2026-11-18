@@ -98,17 +98,17 @@ internal object SubscriptionParser {
         val publicKey = params["publickey"]?.takeIf { it.isNotBlank() }
             ?: throw IllegalArgumentException("В WireGuard-ссылке отсутствует параметр publickey")
         val conf = buildString {
-            append("[Interface]\\n")
-            append("PrivateKey = ").append(privateKey).append('\\n')
-            append("Address = ").append(address).append('\\n')
-            params["mtu"]?.let { append("MTU = ").append(it).append('\\n') }
-            params["dns"]?.let { append("DNS = ").append(it).append('\\n') }
-            append("[Peer]\\n")
-            append("PublicKey = ").append(publicKey).append('\\n')
-            append("Endpoint = ").append(host).append(':').append(uri.port).append('\\n')
-            params["allowedips"]?.let { append("AllowedIPs = ").append(it).append('\\n') }
-            params["presharedkey"]?.let { append("PresharedKey = ").append(it).append('\\n') }
-            params["persistentkeepalive"]?.let { append("PersistentKeepalive = ").append(it).append('\\n') }
+            append("[Interface]\n")
+            append("PrivateKey = ").append(privateKey).append('\n')
+            append("Address = ").append(address).append('\n')
+            params["mtu"]?.let { append("MTU = ").append(it).append('\n') }
+            params["dns"]?.let { append("DNS = ").append(it).append('\n') }
+            append("[Peer]\n")
+            append("PublicKey = ").append(publicKey).append('\n')
+            append("Endpoint = ").append(host).append(':').append(uri.port).append('\n')
+            params["allowedips"]?.let { append("AllowedIPs = ").append(it).append('\n') }
+            params["presharedkey"]?.let { append("PresharedKey = ").append(it).append('\n') }
+            params["persistentkeepalive"]?.let { append("PersistentKeepalive = ").append(it).append('\n') }
         }
         return parseWireGuardConfig(conf, name)
     }
