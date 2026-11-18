@@ -167,8 +167,85 @@ class MainActivity : Activity() {
         appliedDarkTheme = JpnTheme.isDark(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
+        ensureGeoDatabasesBeforeUse()
+
+    }
+
+
+    private fun ensureGeoDatabasesBeforeUse() {
+        if (GeoDatabaseInstaller.areDatabasesValid(this)) {
+            continueMainInitialization()
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(8))
+        }
+        val message = TextView(this).apply {
+            text = "Для корректной работы маршрутизации необходимы базы GeoSite и GeoIP. Загрузите их, чтобы продолжить."
+            textSize = 14f
+            setTextColor(JpnTheme.textPrimary(this@MainActivity))
+        }
+        val progressText = TextView(this).apply {
+            text = "Базы не загружены"
+            textSize = 13f
+            setPadding(0, dp(14), 0, dp(6))
+            setTextColor(JpnTheme.textSecondary(this@MainActivity))
+        }
+        val progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+        }
+        content.addView(message, matchWidth())
+        content.addView(progressText, matchWidth())
+        content.addView(progress, LinearLayout.LayoutParams(-1, dp(8)))
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Требуется загрузить базы")
+            .setView(content)
+            .setCancelable(false)
+            .setNegativeButton("Выход") { _, _ -> finish() }
+            .setPositiveButton("Обновить базы", null)
+            .create()
+
+        dialog.setOnShowListener {
+            val updateButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            updateButton.setOnClickListener {
+                updateButton.isEnabled = false
+                progress.progress = 0
+                progressText.text = "Подготовка загрузки…"
+                GeoDatabaseInstaller.installMissing(this,
+                    onProgress = { percent, status ->
+                        runOnUiThread {
+                            if (!isFinishing && dialog.isShowing) {
+                                progress.progress = percent
+                                progressText.text = status
+                            }
+                        }
+                    },
+                    onComplete = { success, details ->
+                        runOnUiThread {
+                            if (isFinishing || isDestroyed || !dialog.isShowing) return@runOnUiThread
+                            if (success && GeoDatabaseInstaller.areDatabasesValid(this)) {
+                                progress.progress = 100
+                                progressText.text = "Обе базы успешно загружены"
+                                dialog.dismiss()
+                                continueMainInitialization()
+                            } else {
+                                progressText.text = details
+                                updateButton.isEnabled = true
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        dialog.show()
+    }
+
+    private fun continueMainInitialization() {
         DefaultSiteRoutingRules.ensure(this)
-        GeoDatabaseInstaller.ensure(this)
         restoreSavedSubscription()
         AutoSubscriptionScheduler.update(this)
         refreshVpnState()
