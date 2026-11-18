@@ -159,17 +159,18 @@ class XrayVpnService : VpnService() {
                 val selectedPackages = prefs.getStringSet("routing_packages", emptySet())
                     ?.toSet()
                     .orEmpty()
-                    .filter { it != packageName }
+                    .filter { app ->
+                        app != packageName &&
+                            runCatching { packageManager.getApplicationInfo(app, 0) }.isSuccess
+                    }
                 when (mode) {
                     "selected" -> {
-                        // Empty allow-list must never accidentally become full-tunnel.
+                        // Empty or stale allow-list must never accidentally become full-tunnel.
                         val allowed = selectedPackages.ifEmpty { listOf(packageName) }
-                        allowed.forEach { app ->
-                            runCatching { builder.addAllowedApplication(app) }
-                        }
+                        allowed.forEach { app -> builder.addAllowedApplication(app) }
                     }
                     "exclude" -> selectedPackages.forEach { app ->
-                        runCatching { builder.addDisallowedApplication(app) }
+                        builder.addDisallowedApplication(app)
                     }
                 }
             }
