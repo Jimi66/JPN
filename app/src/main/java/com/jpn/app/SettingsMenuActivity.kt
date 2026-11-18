@@ -74,18 +74,10 @@ class SettingsMenuActivity : Activity() {
         }
         content.addView(generalItems, sectionParams())
 
-        content.addView(sectionTitle("Настройки TUN модуля", textColor).apply {
+        content.addView(sectionTitle("Дополнительные настройки", textColor).apply {
             setPadding(0, dp(18), 0, dp(10))
         })
         val tunItems = sectionCard(cardColor, borderColor)
-        addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
-            startActivity(Intent(this, AppRoutingActivity::class.java))
-        }
-        addDivider(tunItems, borderColor)
-        addSubItem(tunItems, "Маршрутизация сайтов", textColor, secondaryColor) {
-            startActivity(Intent(this, SiteRoutingActivity::class.java))
-        }
-        addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Автообновление подписки", textColor, secondaryColor) {
             startActivity(Intent(this, SubscriptionAutoUpdateActivity::class.java))
         }
