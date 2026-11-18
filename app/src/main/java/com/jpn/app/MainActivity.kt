@@ -1511,18 +1511,41 @@ class MainActivity : Activity() {
             .put("tag", "jpn-direct")
             .put("protocol", "freedom")
             .put("settings", JSONObject())
+        val dnsOutbound = JSONObject()
+            .put("tag", "jpn-dns-out")
+            .put("protocol", "dns")
+            .put("settings", JSONObject())
+
+        // Resolve application DNS through Xray's internal DNS client using DoH.
+        // IP-literal DoH endpoints avoid a bootstrap DNS dependency.
+        val dns = JSONObject()
+            .put("servers", JSONArray()
+                .put("https://1.1.1.1/dns-query")
+                .put("https://8.8.8.8/dns-query"))
+            .put("queryStrategy", "UseIP")
 
         // Default policy: every connection uses the selected VPN outbound.
         // Explicit GeoSite, GeoIP and manual entries are the only direct bypasses.
         val outbounds = JSONArray()
             .put(JSONObject(selectedOutbound.toString()))
             .put(directOutbound)
+            .put(dnsOutbound)
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
+            .put("dns", dns)
             .put("outbounds", outbounds)
 
         // Xray loads geosite.dat and geoip.dat from this directory.
         config.put("env", JSONObject().put("xray.location.asset", filesDir.absolutePath))
+
+        // Intercept DNS packets arriving from the Android TUN and hand them to
+        // Xray's internal DNS client instead of forwarding raw port-53 traffic.
+        val routingRules = JSONArray().put(JSONObject()
+            .put("type", "field")
+            .put("inboundTag", JSONArray().put("jpn-tun-in"))
+            .put("network", "tcp,udp")
+            .put("port", "53")
+            .put("outboundTag", "jpn-dns-out"))
 
         if (routingPreferences.getBoolean("site_routing_enabled", false)) {
             val domains = JSONArray()
@@ -1550,27 +1573,25 @@ class MainActivity : Activity() {
                 .lineSequence().map { it.substringBefore("#").trim() }.filter { it.isNotBlank() }
                 .distinct().forEach { ips.put(it) }
 
-            if (domains.length() > 0 || ips.length() > 0) {
-                val bypassRules = JSONArray()
-                // Xray combines conditions inside one rule with AND semantics,
-                // so domain and IP bypasses must be separate direct rules.
-                if (domains.length() > 0) {
-                    bypassRules.put(JSONObject()
-                        .put("type", "field")
-                        .put("domain", domains)
-                        .put("outboundTag", "jpn-direct"))
-                }
-                if (ips.length() > 0) {
-                    bypassRules.put(JSONObject()
-                        .put("type", "field")
-                        .put("ip", ips)
-                        .put("outboundTag", "jpn-direct"))
-                }
-                config.put("routing", JSONObject()
-                    .put("domainStrategy", "AsIs")
-                    .put("rules", bypassRules))
+            // Xray combines conditions inside one rule with AND semantics,
+            // so domain and IP bypasses must be separate direct rules.
+            if (domains.length() > 0) {
+                routingRules.put(JSONObject()
+                    .put("type", "field")
+                    .put("domain", domains)
+                    .put("outboundTag", "jpn-direct"))
+            }
+            if (ips.length() > 0) {
+                routingRules.put(JSONObject()
+                    .put("type", "field")
+                    .put("ip", ips)
+                    .put("outboundTag", "jpn-direct"))
             }
         }
+
+        config.put("routing", JSONObject()
+            .put("domainStrategy", "AsIs")
+            .put("rules", routingRules))
         return config.toString()
     }
 
