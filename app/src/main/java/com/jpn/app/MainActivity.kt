@@ -848,40 +848,9 @@ class MainActivity : Activity() {
         return cleaned to announcement
     }
 
-    private fun decodeSubscriptionBody(body: String): String {
-        val source = body.removePrefix("\uFEFF").trim()
-        if (looksLikeSubscription(source)) return source
+    private fun decodeSubscriptionBody(body: String): String =
+        SubscriptionParser.decodeBody(body)
 
-        val compact = source.filterNot { it.isWhitespace() }
-        val flags = intArrayOf(Base64.DEFAULT, Base64.URL_SAFE or Base64.NO_WRAP)
-        for (flag in flags) {
-            val decoded = runCatching {
-                String(Base64.decode(compact, flag), StandardCharsets.UTF_8).trim()
-            }.getOrNull()
-            if (!decoded.isNullOrBlank() && looksLikeSubscription(decoded)) {
-                return decoded
-            }
-        }
-        // libXray also recognizes supported Base64 subscription wrappers.
-        return source
-    }
-
-    private fun looksLikeSubscription(value: String): Boolean {
-        val lower = value.lowercase()
-        return lower.startsWith("vless://") ||
-            lower.startsWith("vmess://") ||
-            lower.startsWith("trojan://") ||
-            lower.startsWith("ss://") ||
-            lower.startsWith("socks://") ||
-            lower.startsWith("hysteria2://") ||
-            lower.startsWith("hy2://") ||
-            lower.startsWith("{") ||
-            lower.startsWith("[") ||
-            lower.contains("\nvless://") ||
-            lower.contains("\nvmess://") ||
-            lower.contains("\ntrojan://") ||
-            lower.contains("\nss://")
-    }
 
     /**
      * Counts share-link entries in decoded subscription text without logging or
@@ -1111,49 +1080,8 @@ class MainActivity : Activity() {
      * Imports every subscription entry independently. A failed entry is retained
      * as a private raw link and can be retried when the user taps it.
      */
-    private fun parseSubscriptionEntries(text: String): MutableList<JSONObject> {
-        val source = text.removePrefix("\uFEFF").trim()
-        val imported = mutableListOf<JSONObject>()
-
-        if (source.startsWith("{")) {
-            val outbounds = runCatching {
-                JSONObject(source).optJSONArray("outbounds")
-            }.getOrNull()
-            if (outbounds != null) {
-                for (i in 0 until outbounds.length()) {
-                    val outbound = outbounds.optJSONObject(i) ?: continue
-                    val copy = JSONObject(outbound.toString())
-                    if (!hasTlsOrRealityProtection(copy)) continue
-                    if (copy.optString("tag").isBlank()) copy.put("tag", "Сервер ${i + 1}")
-                    imported.add(copy)
-                }
-                return imported
-            }
-        }
-
-        val links = source.lineSequence().map { it.trim() }
-            .filter { line ->
-                val scheme = line.substringBefore("://", "")
-                line.contains("://") &&
-                    scheme.matches(Regex("(?i)vless|vmess|trojan|ss|socks|hysteria2|hy2"))
-            }.toList()
-
-        links.forEachIndexed { index, link ->
-            val fallbackName = "Сервер ${index + 1}"
-            val displayName = runCatching {
-                val fragment = android.net.Uri.parse(link).fragment
-                fragment?.let { android.net.Uri.decode(it) }?.takeIf { it.isNotBlank() }
-            }.getOrNull() ?: fallbackName
-            val parsed = runCatching { parseShareLinks(link) }.getOrNull()
-            val outbound = parsed?.optJSONObject(0)
-            if (outbound != null && hasTlsOrRealityProtection(outbound)) {
-                val copy = JSONObject(outbound.toString())
-                if (copy.optString("tag").isBlank()) copy.put("tag", displayName)
-                imported.add(copy)
-            }
-        }
-        return imported
-    }
+    private fun parseSubscriptionEntries(text: String): MutableList<JSONObject> =
+        SubscriptionParser.parseEntries(text)
 
     /**
      * JPN only lists servers protected by TLS or REALITY.
