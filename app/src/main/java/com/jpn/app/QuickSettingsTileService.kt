@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.drawable.Icon
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.widget.Toast
@@ -22,6 +24,8 @@ import org.json.JSONObject
  */
 class QuickSettingsTileService : TileService() {
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     override fun onStartListening() {
         super.onStartListening()
         refreshTile()
@@ -32,30 +36,42 @@ class QuickSettingsTileService : TileService() {
         val preferences = getSharedPreferences("jpn_settings", MODE_PRIVATE)
         val savedState = preferences.getString("vpn_state", "disconnected")
 
-        if (savedState == "connected" || savedState == "connecting" || isXrayRunning()) {
-            // Reflect the user's tap immediately; the VPN service will publish
-            // the final disconnected state once the tunnel has actually stopped.
-            preferences.edit()
-                .putString("vpn_state", "disconnecting")
-                .putString("vpn_message", "Отключение…")
-                .apply()
-            refreshTile()
-            XrayVpnService.stop(this)
+        if (savedState == "connected" || savedState == "connecting") {
+            stopVpnFromTile(preferences)
             return
         }
 
-        // Android requires an Activity for the system VPN consent prompt.
-        // Once consent is granted, all subsequent tile toggles stay in background.
-        if (VpnService.prepare(this) != null) {
-            val consentIntent = Intent(this, MainActivity::class.java).apply {
-                action = MainActivity.ACTION_QUICK_SETTINGS_TOGGLE
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        // Query native Xray state away from the TileService main thread. Native
+        // calls can take time and must not block Android's System UI callback.
+        Thread {
+            if (isXrayRunning()) {
+                mainHandler.post { stopVpnFromTile(preferences) }
+            } else {
+                mainHandler.post {
+                    // Android requires an Activity for the system VPN consent prompt.
+                    if (VpnService.prepare(this) != null) {
+                        val consentIntent = Intent(this, MainActivity::class.java).apply {
+                            action = MainActivity.ACTION_QUICK_SETTINGS_TOGGLE
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        startActivityAndCollapse(consentIntent)
+                    } else {
+                        Thread { startVpnInBackground() }.start()
+                    }
+                }
             }
-            startActivityAndCollapse(consentIntent)
-            return
-        }
+        }.start()
+    }
 
-        startVpnInBackground()
+    private fun stopVpnFromTile(preferences: android.content.SharedPreferences) {
+        // Reflect the user's tap immediately; the VPN service will publish
+        // the final disconnected state once the tunnel has actually stopped.
+        preferences.edit()
+            .putString("vpn_state", "disconnecting")
+            .putString("vpn_message", "Отключение…")
+            .apply()
+        refreshTile()
+        XrayVpnService.stop(this)
     }
 
     private fun startVpnInBackground() {
@@ -104,18 +120,20 @@ class QuickSettingsTileService : TileService() {
                 .putString("vpn_message", "Подключение…")
                 .apply()
             XrayVpnService.start(this, config)
-            refreshTile()
+            mainHandler.post { refreshTile() }
         } catch (error: Exception) {
             preferences.edit()
                 .putString("vpn_state", "error")
                 .putString("vpn_message", error.message ?: "Не удалось запустить VPN")
                 .apply()
-            refreshTile()
-            Toast.makeText(
-                this,
-                error.message ?: "Не удалось запустить VPN",
-                Toast.LENGTH_LONG
-            ).show()
+            mainHandler.post {
+                refreshTile()
+                Toast.makeText(
+                    this,
+                    error.message ?: "Не удалось запустить VPN",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
