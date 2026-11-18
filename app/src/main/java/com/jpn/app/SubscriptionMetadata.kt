@@ -89,11 +89,16 @@ internal object SubscriptionMetadata {
         val muxQuic = metadata.optString("mux-quic").lowercase()
             .takeIf { it in setOf("reject", "allow", "skip") }
         if (muxEnabled != null || muxTcp != null || muxXudp != null || muxQuic != null) {
+            val protocol = outbound.optString("protocol").lowercase()
+            val muxSupported = stream != null &&
+                protocol !in setOf("shadowsocks", "socks", "trojan", "wireguard")
             val mux = outbound.optJSONObject("mux") ?: JSONObject()
-            muxEnabled?.let { mux.put("enabled", it) }
-            muxTcp?.let { mux.put("concurrency", it) }
-            muxXudp?.let { mux.put("xudpConcurrency", it) }
-            muxQuic?.let { mux.put("xudpProxyUDP443", it) }
+            mux.put("enabled", muxEnabled == true && muxSupported)
+            if (muxSupported) {
+                muxTcp?.let { mux.put("concurrency", it) }
+                muxXudp?.let { mux.put("xudpConcurrency", it) }
+                muxQuic?.let { mux.put("xudpProxyUDP443", it) }
+            }
             outbound.put("mux", mux)
         }
         return outbound
