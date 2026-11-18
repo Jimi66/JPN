@@ -1442,7 +1442,11 @@ class MainActivity : Activity() {
                     .put("cloudflare-dns.com", "1.1.1.1")
                     .put("dns.google", "8.8.8.8")
                     .put("domain:googleapis.cn", "googleapis.com"))
-                .put("queryStrategy", SubscriptionMetadata.preferredIpQueryStrategy(metadata))
+        }
+        if (metadata?.has("preferred-ip-type") == true) {
+            dns.put("queryStrategy", SubscriptionMetadata.preferredIpQueryStrategy(metadata))
+        } else if (!dns.has("queryStrategy")) {
+            dns.put("queryStrategy", "UseIP")
         }
 
         val dnsHosts = dns.optJSONObject("hosts") ?: JSONObject().also { dns.put("hosts", it) }
