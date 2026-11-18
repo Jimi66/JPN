@@ -1,7 +1,7 @@
 package com.jpn.app
 
 import org.json.JSONObject
-import java.net.InetAddress
+import java.net.URL
 
 /**
  * Network-related subscription headers understood by Happ-compatible providers.
@@ -73,8 +73,8 @@ internal object SubscriptionMetadata {
                     settings.put("host", org.json.JSONArray().put(host))
                 }
             }
-            stream.optJSONObject("tlsSettings")?.let { if (it.optString("serverName").isBlank()) it.put("serverName", host) }
-            stream.optJSONObject("realitySettings")?.let { if (it.optString("serverName").isBlank()) it.put("serverName", host) }
+            stream.optJSONObject("tlsSettings")?.put("serverName", host)
+            stream.optJSONObject("realitySettings")?.put("serverName", host)
         }
 
         if (insecure != null) {
@@ -106,8 +106,39 @@ internal object SubscriptionMetadata {
         val resolved = metadata?.optString("resolve-address")?.trim().orEmpty()
         val host = endpointHost(outbound)
         if (resolved.isEmpty() || host.isNullOrBlank()) return
-        val validIp = runCatching { InetAddress.getByName(resolved).hostAddress }.getOrNull()
-        if (validIp != null && !validIp.contains("%")) dnsHosts.put(host, validIp)
+        if (isIpLiteral(resolved)) dnsHosts.put(host, resolved)
+    }
+
+    /**
+     * Happ can resolve the proxy endpoint with a dedicated DoH resolver before
+     * the tunnel starts. Recreate that resolver as a domain-scoped Xray DNS
+     * server, keeping its bootstrap IP pinned in dns.hosts.
+     */
+    fun addServerResolutionDns(dns: JSONObject, dnsHosts: JSONObject, outbound: JSONObject, metadata: JSONObject?) {
+        if (boolean(metadata, "resolve-server-address-enable") != true) return
+        val endpoint = endpointHost(outbound) ?: return
+        val dohUrl = metadata?.optString("server-address-resolve-dns-domain")?.trim().orEmpty()
+        if (!dohUrl.startsWith("https://", true)) return
+
+        val resolverHost = runCatching { URL(dohUrl).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: return
+        val bootstrapIp = metadata?.optString("server-address-resolve-dns-ip")?.trim().orEmpty()
+        if (isIpLiteral(bootstrapIp)) dnsHosts.put(resolverHost, bootstrapIp)
+
+        val servers = dns.optJSONArray("servers") ?: org.json.JSONArray().also { dns.put("servers", it) }
+        servers.put(0, JSONObject()
+            .put("address", dohUrl)
+            .put("domains", org.json.JSONArray().put(endpoint)))
+    }
+
+    private fun isIpLiteral(value: String): Boolean {
+        val candidate = value.trim()
+        if (candidate.isEmpty() || candidate.contains("%")) return false
+        if (candidate.contains(":")) return candidate.matches(Regex("[0-9a-fA-F:]+"))
+        val parts = candidate.split(".")
+        return parts.size == 4 && parts.all { part ->
+            part.isNotEmpty() && part.length <= 3 && part.all(Char::isDigit) &&
+                part.toIntOrNull()?.let { it in 0..255 } == true
+        }
     }
 
     fun preferredIpQueryStrategy(metadata: JSONObject?): String {
