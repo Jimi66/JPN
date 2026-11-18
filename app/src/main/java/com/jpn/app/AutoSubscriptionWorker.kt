@@ -23,6 +23,7 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
             var title: String? = null
             var announce: String? = null
             var traffic: String? = null
+            var metadata: JSONObject? = null
             try {
                 connection.instanceFollowRedirects = true
                 connection.connectTimeout = 15000; connection.readTimeout = 20000
@@ -45,6 +46,7 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                 title = decodeTitle(connection.getHeaderField("profile-title"))
                 announce = decodeAnnouncement(connection.getHeaderField("announce"))
                 traffic = connection.getHeaderField("subscription-userinfo")?.trim()?.takeIf { it.isNotBlank() }
+                metadata = SubscriptionMetadata.fromHeaders(connection.headerFields)
                 body = String(output.toByteArray(), StandardCharsets.UTF_8)
             } finally { connection.disconnect() }
 
@@ -56,13 +58,14 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                 } else true
             }.joinToString("\n")
             val subscription = SubscriptionParser.decodeBody(cleaned)
-            val nodes = SubscriptionParser.parseEntries(subscription)
+            val nodes = SubscriptionParser.parseEntries(subscription, metadata)
             if (nodes.isEmpty()) throw IllegalStateException("No compatible servers in subscription")
             prefs.edit()
                 .putString("subscription_content", subscription)
                 .putString("subscription_name", title ?: runCatching { URL(address).host }.getOrNull())
                 .putString("subscription_announce", announce ?: bodyAnnouncement)
                 .putString("subscription_traffic", traffic)
+                .putString("subscription_meta_json", metadata?.toString())
                 .putString("saved_nodes_json", JSONArray(nodes).toString())
                 .apply()
             Result.success()
