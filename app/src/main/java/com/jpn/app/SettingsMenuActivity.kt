@@ -93,6 +93,10 @@ class SettingsMenuActivity : Activity() {
         addSubItem(tunItems, "Автообновление подписки", textColor, secondaryColor) {
             startActivity(Intent(this, SubscriptionAutoUpdateActivity::class.java))
         }
+        addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
+            startActivity(Intent(this, AppRoutingActivity::class.java))
+        }
         content.addView(tunItems, sectionParams())
 
         // Keep the discreet credits and the seven-tap video easter egg
