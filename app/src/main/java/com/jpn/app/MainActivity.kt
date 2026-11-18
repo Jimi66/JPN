@@ -1296,6 +1296,22 @@ class MainActivity : Activity() {
         return JSONObject(parsed.getJSONObject(0).toString())
     }
 
+    private fun describeConnectionParameters(outbound: JSONObject): String {
+        val values = mutableListOf<String>()
+        fun addIfPresent(value: String?) {
+            val normalized = value?.trim().orEmpty()
+            if (normalized.isNotEmpty() && !normalized.equals("none", ignoreCase = true)) {
+                values.add(normalized.uppercase(java.util.Locale.ROOT))
+            }
+        }
+
+        addIfPresent(outbound.optString("protocol"))
+        val streamSettings = outbound.optJSONObject("streamSettings")
+        addIfPresent(streamSettings?.optString("network"))
+        addIfPresent(streamSettings?.optString("security"))
+        return values.joinToString(" / ")
+    }
+
     private fun renderNodes() {
         // ListView is an AdapterView: its rows are owned by the adapter.
         // Calling removeAllViews() here throws UnsupportedOperationException
@@ -1332,12 +1348,24 @@ class MainActivity : Activity() {
                     setPadding(dp(12), dp(9), dp(16), dp(9))
                     minimumHeight = dp(44)
 
-                    addView(TextView(this@MainActivity).apply {
-                        tag = "server_name"
-                        textSize = 16f
-                        setTextColor(0xFF202124.toInt())
+                    val serverTexts = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
                         gravity = Gravity.CENTER_VERTICAL
-                    }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(TextView(this@MainActivity).apply {
+                            tag = "server_name"
+                            textSize = 16f
+                            setTextColor(0xFF202124.toInt())
+                            gravity = Gravity.CENTER_VERTICAL
+                        }, matchWidth())
+                        addView(TextView(this@MainActivity).apply {
+                            tag = "server_parameters"
+                            textSize = 11f
+                            setTextColor(0xFF73777D.toInt())
+                            gravity = Gravity.CENTER_VERTICAL
+                            visibility = android.view.View.GONE
+                        }, matchWidth())
+                    }
+                    addView(serverTexts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
                     addView(TextView(this@MainActivity).apply {
                         tag = "server_latency"
@@ -1362,6 +1390,11 @@ class MainActivity : Activity() {
                 }
 
                 row.findViewWithTag<TextView>("server_name").text = name
+                val connectionParameters = describeConnectionParameters(node)
+                row.findViewWithTag<TextView>("server_parameters").apply {
+                    text = connectionParameters
+                    visibility = if (connectionParameters.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+                }
                 row.findViewWithTag<TextView>("server_latency").apply {
                     text = latencyText
                     visibility = if (latencyText.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
