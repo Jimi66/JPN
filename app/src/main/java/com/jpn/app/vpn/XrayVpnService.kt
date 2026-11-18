@@ -141,7 +141,7 @@ class XrayVpnService : VpnService() {
             .addAddress("fdfe:dcba:9876::1", 126)
             .addRoute("::", 0)
 
-        // A temporary check routes only JPN itself through the test tunnel.
+        // Diagnostic ping mode is intentionally limited to JPN itself.
         if (testMode) builder.addAllowedApplication(packageName)
 
         vpnInterface = builder.establish()
@@ -172,8 +172,7 @@ class XrayVpnService : VpnService() {
                     .put("name", "jpn-tun")
                     .put("mtu", 1500)
             )
-        // Recover destination domains from TLS/HTTP/QUIC traffic so that
-        // GeoSite and manual domain bypass rules work with Android's TUN.
+        // Preserve destination metadata for Xray protocol handling inside the tunnel.
         tunInbound.put(
             "sniffing",
             JSONObject()
