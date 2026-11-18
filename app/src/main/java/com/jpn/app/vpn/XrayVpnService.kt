@@ -9,6 +9,8 @@ import android.content.Intent
 import android.net.VpnService
 import android.service.quicksettings.TileService
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,6 +56,10 @@ class XrayVpnService : VpnService() {
         }
     }
 
+    private lateinit var workerThread: HandlerThread
+    private lateinit var workerHandler: Handler
+
+    // All native Xray and TUN lifecycle operations are serialized on this thread.
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
     private var coreStarted = false
     private var testMode = false
@@ -63,35 +69,54 @@ class XrayVpnService : VpnService() {
         override fun protectFd(fd: Long): Boolean = protect(fd.toInt())
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        workerThread = HandlerThread("JPN-Xray-Service").apply { start() }
+        workerHandler = Handler(workerThread.looper)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                testMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false) || testMode
-                stopCoreAndTunnel()
-                publishState("disconnected", if (testMode) "Тестовое подключение отключено" else "VPN отключён", testMode)
-                testMode = false
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                val requestedTestMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false)
+                workerHandler.post {
+                    testMode = requestedTestMode || testMode
+                    stopCoreAndTunnel()
+                    publishState(
+                        "disconnected",
+                        if (testMode) "Тестовое подключение отключено" else "VPN отключён",
+                        testMode
+                    )
+                    testMode = false
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf(startId)
+                }
                 return START_NOT_STICKY
             }
             ACTION_START -> {
-                testMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false)
                 val config = intent.getStringExtra(EXTRA_XRAY_JSON)
+                val requestedTestMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false)
                 if (config.isNullOrBlank()) {
                     stopSelf(startId)
                     return START_NOT_STICKY
                 }
+
+                // A foreground service must show its notification immediately;
+                // the potentially blocking native startup is queued below.
                 createNotificationChannel()
                 startForeground(NOTIFICATION_ID, buildNotification())
-                try {
-                    startCoreAndTunnel(config)
-                } catch (error: Exception) {
-                    stopCoreAndTunnel()
-                    publishState("error", error.message ?: "Не удалось запустить Xray", testMode)
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf(startId)
+                workerHandler.post {
+                    testMode = requestedTestMode
+                    try {
+                        startCoreAndTunnel(config)
+                    } catch (error: Exception) {
+                        stopCoreAndTunnel()
+                        publishState("error", error.message ?: "Не удалось запустить Xray", testMode)
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf(startId)
+                    }
                 }
             }
         }
@@ -208,14 +233,21 @@ class XrayVpnService : VpnService() {
     }
 
     override fun onRevoke() {
-        stopCoreAndTunnel()
-        publishState("disconnected", "Разрешение VPN отозвано")
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        workerHandler.post {
+            stopCoreAndTunnel()
+            publishState("disconnected", "Разрешение VPN отозвано")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
-        stopCoreAndTunnel()
+        // Keep cleanup off Android's main thread. quitSafely() drains this task
+        // and any lifecycle work already queued ahead of it.
+        if (::workerHandler.isInitialized) {
+            workerHandler.post { stopCoreAndTunnel() }
+            workerThread.quitSafely()
+        }
         super.onDestroy()
     }
 
