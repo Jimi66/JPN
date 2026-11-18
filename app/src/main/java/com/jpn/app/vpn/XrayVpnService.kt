@@ -132,9 +132,16 @@ class XrayVpnService : VpnService() {
     private fun startCoreAndTunnel(sourceConfig: String) {
         stopCoreAndTunnel()
 
+        val config = JSONObject(sourceConfig)
+        val tunMtu = config.optInt("jpnTunMtu", 1500).coerceIn(1280, 9000)
+        val sniffingEnabled = config.optBoolean("jpnSniffingEnabled", true)
+        // These are JPN-side controls, not Xray configuration fields.
+        config.remove("jpnTunMtu")
+        config.remove("jpnSniffingEnabled")
+
         val builder = Builder()
             .setSession("JPN")
-            .setMtu(1500)
+            .setMtu(tunMtu)
             .addDnsServer("1.1.1.1")
             .addAddress("10.111.0.1", 30)
             .addRoute("0.0.0.0", 0)
@@ -151,7 +158,6 @@ class XrayVpnService : VpnService() {
         LibXray.registerDialerController(socketController)
         LibXray.registerListenerController(socketController)
 
-        val config = JSONObject(sourceConfig)
         val env = config.optJSONObject("env") ?: JSONObject().also {
             config.put("env", it)
         }
@@ -170,13 +176,13 @@ class XrayVpnService : VpnService() {
                 JSONObject()
                     // Android assigns the interface name when Builder.establish() is called.
                     .put("name", "jpn-tun")
-                    .put("mtu", 1500)
+                    .put("mtu", tunMtu)
             )
         // Preserve destination metadata for Xray protocol handling inside the tunnel.
         tunInbound.put(
             "sniffing",
             JSONObject()
-                .put("enabled", true)
+                .put("enabled", sniffingEnabled)
                 .put("destOverride", JSONArray().put("http").put("tls").put("quic"))
                 .put("metadataOnly", false)
                 .put("routeOnly", false)

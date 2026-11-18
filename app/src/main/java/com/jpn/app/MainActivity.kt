@@ -121,6 +121,7 @@ class MainActivity : Activity() {
     @Volatile private var downloadedSubscriptionName: String? = null
     @Volatile private var downloadedSubscriptionAnnouncement: String? = null
     @Volatile private var downloadedSubscriptionTraffic: String? = null
+    @Volatile private var downloadedSubscriptionMetadata: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -600,7 +601,10 @@ class MainActivity : Activity() {
                 val subscriptionName = downloadedSubscriptionName
                     ?: runCatching { URL(subscriptionUrl).host }.getOrNull()?.takeIf { it.isNotBlank() }
                 val subscriptionText = decodeSubscriptionBody(bodyMetadata.first)
-                val imported = parseSubscriptionEntries(subscriptionText)
+                val subscriptionMetadata = runCatching {
+                    downloadedSubscriptionMetadata?.let { JSONObject(it) }
+                }.getOrNull()
+                val imported = parseSubscriptionEntries(subscriptionText, subscriptionMetadata)
                 mainHandler.post {
                     nodes.clear()
                     nodes.addAll(imported)
@@ -609,6 +613,7 @@ class MainActivity : Activity() {
                         .putString(KEY_SUBSCRIPTION_NAME, subscriptionName)
                         .putString(KEY_SUBSCRIPTION_ANNOUNCE, subscriptionAnnouncement)
                         .putString(KEY_SUBSCRIPTION_TRAFFIC, downloadedSubscriptionTraffic)
+                        .putString("subscription_meta_json", subscriptionMetadata?.toString())
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     AutoSubscriptionScheduler.update(this@MainActivity)
@@ -665,6 +670,7 @@ class MainActivity : Activity() {
             downloadedSubscriptionTraffic = connection.getHeaderField("subscription-userinfo")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
+            downloadedSubscriptionMetadata = SubscriptionMetadata.fromHeaders(connection.headerFields).toString()
             return String(output.toByteArray(), StandardCharsets.UTF_8)
         } finally {
             connection.disconnect()
@@ -988,8 +994,8 @@ class MainActivity : Activity() {
      * Imports every subscription entry independently. A failed entry is retained
      * as a private raw link and can be retried when the user taps it.
      */
-    private fun parseSubscriptionEntries(text: String): MutableList<JSONObject> =
-        SubscriptionParser.parseEntries(text)
+    private fun parseSubscriptionEntries(text: String, metadata: JSONObject? = null): MutableList<JSONObject> =
+        SubscriptionParser.parseEntries(text, metadata)
 
     /**
      * JPN only lists servers protected by TLS or REALITY.
@@ -1414,40 +1420,57 @@ class MainActivity : Activity() {
     }
 
     private fun buildXrayConfig(selectedOutbound: JSONObject): String {
-        // All ordinary traffic uses the selected server. DNS packets from the
-        // Android TUN are handed to Xray's DNS outbound and resolved over DoH.
-        val dnsOutbound = JSONObject()
-            .put("tag", "jpn-dns-out")
-            .put("protocol", "dns")
-            .put("settings", JSONObject())
+        val metadata = selectedOutbound.optJSONObject("jpnSubscriptionMetadata")
+        val selected = SubscriptionMetadata.applyToOutbound(selectedOutbound)
+        selected.remove("jpnSubscriptionMetadata")
+        val subscriptionDns = selectedOutbound.optJSONObject("jpnSubscriptionDns")
+        selected.remove("jpnSubscriptionDns")
 
-        // IP-literal DoH endpoints avoid a bootstrap DNS dependency.
-        val dns = JSONObject()
-            .put("servers", JSONArray()
-                .put("https://1.1.1.1/dns-query")
-                .put("https://8.8.8.8/dns-query"))
-            .put("queryStrategy", "UseIP")
+        // Happ keeps the DoH hostname for TLS SNI and pins that hostname to
+        // the resolver IP. Using https://1.1.1.1 directly can fail certificate
+        // validation because the certificate is issued to cloudflare-dns.com.
+        val useSubscriptionDns = SubscriptionMetadata.boolean(metadata, "dns-from-json-enable") == true &&
+            subscriptionDns?.optJSONArray("servers") != null
+        val dns = if (useSubscriptionDns) {
+            JSONObject(subscriptionDns!!.toString())
+        } else {
+            JSONObject()
+                .put("servers", JSONArray()
+                    .put("https://cloudflare-dns.com/dns-query")
+                    .put("https://dns.google/dns-query"))
+                .put("hosts", JSONObject()
+                    .put("cloudflare-dns.com", "1.1.1.1")
+                    .put("dns.google", "8.8.8.8")
+                    .put("domain:googleapis.cn", "googleapis.com"))
+        }
+        if (metadata?.has("preferred-ip-type") == true) {
+            dns.put("queryStrategy", SubscriptionMetadata.preferredIpQueryStrategy(metadata))
+        } else if (!dns.has("queryStrategy")) {
+            dns.put("queryStrategy", "UseIP")
+        }
 
-        // The selected proxy is the first/default outbound. There are no
-        // freedom/direct routes or GeoSite/GeoIP/manual bypass rules.
-        val outbounds = JSONArray()
-            .put(JSONObject(selectedOutbound.toString()))
-            .put(dnsOutbound)
+        val dnsHosts = dns.optJSONObject("hosts") ?: JSONObject().also { dns.put("hosts", it) }
+        SubscriptionMetadata.addResolveAddress(dnsHosts, selected, metadata)
+        SubscriptionMetadata.addServerResolutionDns(dns, dnsHosts, selected, metadata)
+
+        // Match Happ's normal VPN mode: Android's system DNS server is
+        // reached through the selected proxy like all other traffic. Xray's
+        // DNS section remains available for resolving proxy/server hostnames.
+        // There is no separate DNS outbound or direct/site-routing exception.
+        val outbounds = JSONArray().put(selected)
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put("dns", dns)
             .put("outbounds", outbounds)
 
-        val routingRules = JSONArray().put(JSONObject()
-            .put("type", "field")
-            .put("inboundTag", JSONArray().put("jpn-tun-in"))
-            .put("network", "tcp,udp")
-            .put("port", "53")
-            .put("outboundTag", "jpn-dns-out"))
+        val tunMtu = metadata?.optString("xray-tun-mtu")?.toIntOrNull()
+            ?.takeIf { it in 1280..9000 } ?: 1500
+        config.put("jpnTunMtu", tunMtu)
+        config.put("jpnSniffingEnabled", SubscriptionMetadata.boolean(metadata, "sniffing-enable") ?: true)
 
         config.put("routing", JSONObject()
             .put("domainStrategy", "AsIs")
-            .put("rules", routingRules))
+            .put("rules", JSONArray()))
         return config.toString()
     }
 
