@@ -93,10 +93,8 @@ class XrayVpnService : VpnService() {
                     )
                     testMode = false
                     if (startId == latestStartId) {
-                        if (startId == latestStartId) {
-                            stopForeground(STOP_FOREGROUND_REMOVE)
-                            stopSelf(startId)
-                        }
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf(startId)
                     }
                 }
                 return START_NOT_STICKY
@@ -120,8 +118,10 @@ class XrayVpnService : VpnService() {
                     } catch (error: Exception) {
                         stopCoreAndTunnel()
                         publishState("error", error.message ?: "Не удалось запустить Xray", testMode)
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf(startId)
+                        if (startId == latestStartId) {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf(startId)
+                        }
                     }
                 }
             }
