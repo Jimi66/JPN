@@ -179,7 +179,7 @@ class XrayVpnService : VpnService() {
                 .put("enabled", true)
                 .put("destOverride", JSONArray().put("http").put("tls").put("quic"))
                 .put("metadataOnly", false)
-                .put("routeOnly", true)
+                .put("routeOnly", false)
         )
         inbounds.put(tunInbound)
 
