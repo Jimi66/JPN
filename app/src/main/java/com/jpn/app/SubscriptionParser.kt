@@ -44,7 +44,10 @@ internal object SubscriptionParser {
         }
         if (source.startsWith("[Interface]", ignoreCase = true)) {
             runCatching { parseWireGuardConfig(source, "WireGuard") }
-                .getOrNull()?.let { imported.add(it) }
+                .getOrNull()?.let {
+                    attachSubscriptionData(it, metadata, null)
+                    imported.add(it)
+                }
             return imported
         }
         val links = source.lineSequence().map { it.trim() }.filter { line ->
