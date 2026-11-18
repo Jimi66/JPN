@@ -143,7 +143,7 @@ internal object SubscriptionMetadata {
         val servers = dns.optJSONArray("servers") ?: org.json.JSONArray().also { dns.put("servers", it) }
         servers.put(0, JSONObject()
             .put("address", dohUrl)
-            .put("domains", org.json.JSONArray().put(endpoint)))
+            .put("domains", org.json.JSONArray().put("full:$endpoint")) )
     }
 
     private fun isIpLiteral(value: String): Boolean {
