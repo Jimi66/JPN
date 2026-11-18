@@ -1452,6 +1452,7 @@ class MainActivity : Activity() {
 
         val dnsHosts = dns.optJSONObject("hosts") ?: JSONObject().also { dns.put("hosts", it) }
         SubscriptionMetadata.addResolveAddress(dnsHosts, selected, metadata)
+        SubscriptionMetadata.addServerResolutionDns(dns, dnsHosts, selected, metadata)
 
         // The selected proxy remains the default outbound: full tunnel only.
         // No direct/freedom routes or site/application bypass rules are added.
