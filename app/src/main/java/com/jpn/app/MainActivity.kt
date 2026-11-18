@@ -1589,6 +1589,7 @@ class MainActivity : Activity() {
                     selectedNodeIndex = nodes.lastIndex
                     val editor = preferences.edit()
                         .putString(KEY_SAVED_NODES, JSONArray(nodes).toString())
+                        .putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex)
                     if (preferences.getString(KEY_SUBSCRIPTION_NAME, null).isNullOrBlank()) {
                         editor.putString(KEY_SUBSCRIPTION_NAME, "WireGuard")
                     }
