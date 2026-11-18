@@ -297,16 +297,57 @@ class SiteRoutingActivity : Activity() {
     }
 
     private fun downloadGeoFiles() {
-        val geositeAddress = prefs.getString(KEY_GEOSITE_URL, GEO_DEFAULT + "geosite.dat") ?: GEO_DEFAULT + "geosite.dat"
-        val geoipAddress = prefs.getString(KEY_GEOIP_URL, GEO_DEFAULT + "geoip.dat") ?: GEO_DEFAULT + "geoip.dat"
+        val geositeAddress = prefs.getString(KEY_GEOSITE_URL, GEO_DEFAULT + "geosite.dat")
+            ?: GEO_DEFAULT + "geosite.dat"
+        val geoipAddress = prefs.getString(KEY_GEOIP_URL, GEO_DEFAULT + "geoip.dat")
+            ?: GEO_DEFAULT + "geoip.dat"
+        val appContext = applicationContext
         Toast.makeText(this, "Загружаю GeoSite и GeoIP…", Toast.LENGTH_SHORT).show()
+
         Thread {
-            val results = listOf("GeoSite" to runCatching { downloadGeoFileNow(geositeAddress, "geosite.dat") }, "GeoIP" to runCatching { downloadGeoFileNow(geoipAddress, "geoip.dat") })
-            val succeeded = results.filter { it.second.isSuccess }; val failed = results.filter { it.second.isFailure }
+            val results = listOf(
+                "GeoSite" to runCatching { downloadGeoFileNow(geositeAddress, "geosite.dat") },
+                "GeoIP" to runCatching { downloadGeoFileNow(geoipAddress, "geoip.dat") }
+            )
+            val succeeded = results.filter { it.second.isSuccess }
+            val failed = results.filter { it.second.isFailure }
+            val details = (
+                succeeded.map { it.first + ": обновлена (" + it.second.getOrThrow() + " категорий)" } +
+                    failed.map {
+                        it.first + ": ошибка — " +
+                            (it.second.exceptionOrNull()?.message ?: "неизвестная ошибка")
+                    }
+                ).joinToString("\n")
+
+            if (succeeded.isNotEmpty()) {
+                appContext.getSharedPreferences(PREFS, MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("site_routing_restart_pending", true)
+                    .apply()
+            }
+
             runOnUiThread {
-                if (succeeded.isNotEmpty()) markRestartPending()
-                val details = (succeeded.map { it.first + ": обновлена (" + it.second.getOrThrow() + " категорий)" } + failed.map { it.first + ": ошибка — " + (it.second.exceptionOrNull()?.message ?: "неизвестная ошибка") }).joinToString("\n")
-                AlertDialog.Builder(this).setTitle("Обновление баз").setMessage(if (failed.isEmpty()) "Обе базы успешно обновлены. Изменения применятся после переподключения VPN." else details).setPositiveButton("OK", null).show()
+                // The download must finish safely even if the user has already
+                // left this screen. Never attach a dialog to a destroyed Activity.
+                if (!isFinishing && !isDestroyed) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Обновление баз")
+                        .setMessage(
+                            if (failed.isEmpty()) {
+                                "Обе базы успешно обновлены. Изменения применятся после переподключения VPN."
+                            } else {
+                                details
+                            }
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    Toast.makeText(
+                        appContext,
+                        if (failed.isEmpty()) "Базы GeoSite и GeoIP обновлены" else details,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }.start()
     }
