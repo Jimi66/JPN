@@ -3,6 +3,7 @@ package com.jpn.app
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -10,17 +11,23 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.VideoView
 
 class SettingsMenuActivity : Activity() {
     private var renderedDark: Boolean? = null
     private var easterEggTapCount = 0
     private var lastEasterEggTap = 0L
+    private var easterEggVideo: VideoView? = null
 
     override fun onResume() {
         super.onResume()
         val currentDark = JpnTheme.isDark(this)
         if (renderedDark != null && renderedDark != currentDark) {
             recreate()
+        } else {
+            easterEggVideo?.let { video ->
+                if (!video.isPlaying && video.visibility == View.VISIBLE) video.start()
+            }
         }
     }
 
@@ -96,7 +103,7 @@ class SettingsMenuActivity : Activity() {
             setPadding(0, dp(8), 0, dp(4))
             isClickable = true
             isFocusable = true
-            setOnClickListener { handleEasterEggTap() }
+            setOnClickListener { handleEasterEggTap(content) }
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
@@ -109,7 +116,7 @@ class SettingsMenuActivity : Activity() {
         JpnTheme.apply(this, scroll)
     }
 
-    private fun handleEasterEggTap() {
+    private fun handleEasterEggTap(content: LinearLayout) {
         val now = SystemClock.elapsedRealtime()
         if (now - lastEasterEggTap > 2500L) easterEggTapCount = 0
         lastEasterEggTap = now
@@ -117,8 +124,54 @@ class SettingsMenuActivity : Activity() {
 
         if (easterEggTapCount >= 7) {
             easterEggTapCount = 0
-            startActivity(Intent(this, EasterEggActivity::class.java))
+            if (easterEggVideo != null) {
+                easterEggVideo?.visibility = View.VISIBLE
+                easterEggVideo?.start()
+                return
+            }
+
+            val video = VideoView(this).apply {
+                setBackgroundColor(0xFF000000.toInt())
+                setVideoURI(Uri.parse("android.resource://$packageName/${R.raw.easter_egg}"))
+                setOnPreparedListener { player ->
+                    player.isLooping = false
+                    start()
+                }
+                setOnCompletionListener {
+                    // Leave the inline player in place; no fullscreen transition or controls.
+                }
+                setOnErrorListener { _, _, _ ->
+                    android.widget.Toast.makeText(
+                        this@SettingsMenuActivity,
+                        "Не удалось воспроизвести видео пасхалки",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    visibility = View.GONE
+                    true
+                }
+            }
+            easterEggVideo = video
+            content.addView(video, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(200)
+            ).apply {
+                topMargin = dp(12)
+            })
+            video.post {
+                video.start()
+                (content.parent as? ScrollView)?.smoothScrollTo(0, content.height)
+            }
         }
+    }
+
+    override fun onPause() {
+        easterEggVideo?.pause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        easterEggVideo?.stopPlayback()
+        easterEggVideo = null
+        super.onDestroy()
     }
 
     private fun sectionTitle(title: String, color: Int) = TextView(this).apply {
