@@ -3,21 +3,28 @@ package com.jpn.app
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.VideoView
 
 class SettingsMenuActivity : Activity() {
     private var renderedDark: Boolean? = null
     private var easterEggTapCount = 0
     private var lastEasterEggTap = 0L
-    private var easterEggVideo: VideoView? = null
+    private var easterEggContainer: FrameLayout? = null
+    private var easterEggTexture: AspectRatioTextureView? = null
+    private var easterEggPlayer: MediaPlayer? = null
+    private var videoPrepared = false
+    private var videoCompleted = false
 
     override fun onResume() {
         super.onResume()
@@ -25,9 +32,7 @@ class SettingsMenuActivity : Activity() {
         if (renderedDark != null && renderedDark != currentDark) {
             recreate()
         } else {
-            easterEggVideo?.let { video ->
-                if (!video.isPlaying && video.visibility == View.VISIBLE) video.start()
-            }
+            if (videoPrepared && !videoCompleted) easterEggPlayer?.start()
         }
     }
 
@@ -121,56 +126,123 @@ class SettingsMenuActivity : Activity() {
         if (now - lastEasterEggTap > 2500L) easterEggTapCount = 0
         lastEasterEggTap = now
         easterEggTapCount++
-
         if (easterEggTapCount >= 7) {
             easterEggTapCount = 0
-            if (easterEggVideo != null) {
-                easterEggVideo?.visibility = View.VISIBLE
-                easterEggVideo?.start()
+            if (easterEggContainer?.visibility == View.VISIBLE) return
+            showInlineEasterEgg(content)
+        }
+    }
+
+    private fun showInlineEasterEgg(content: LinearLayout) {
+        releaseEasterEggPlayer()
+        videoPrepared = false
+        videoCompleted = false
+        val container = FrameLayout(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        val texture = AspectRatioTextureView(this)
+        container.addView(texture, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER
+        ))
+        easterEggContainer = container
+        easterEggTexture = texture
+        content.addView(container, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(200)
+        ).apply { topMargin = dp(12) })
+        container.post { (content.parent as? ScrollView)?.smoothScrollTo(0, content.height) }
+
+        texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surfaceTexture: android.graphics.SurfaceTexture,
+                width: Int, height: Int) {
+                try {
+                    val player = MediaPlayer()
+                    easterEggPlayer = player
+                    player.setDataSource(this@SettingsMenuActivity,
+                        Uri.parse("android.resource://$packageName/${R.raw.easter_egg}"))
+                    player.setSurface(Surface(surfaceTexture))
+                    player.setOnVideoSizeChangedListener { _, videoWidth, videoHeight ->
+                        texture.setVideoSize(videoWidth, videoHeight)
+                    }
+                    player.setOnPreparedListener { mp ->
+                        videoPrepared = true
+                        mp.isLooping = false
+                        mp.start()
+                    }
+                    player.setOnCompletionListener {
+                        videoCompleted = true
+                        videoPrepared = false
+                        container.visibility = View.GONE
+                        releaseEasterEggPlayer()
+                    }
+                    player.setOnErrorListener { _, _, _ ->
+                        container.visibility = View.GONE
+                        videoCompleted = true
+                        videoPrepared = false
+                        releaseEasterEggPlayer()
+                        android.widget.Toast.makeText(this@SettingsMenuActivity,
+                            "Не удалось воспроизвести видео пасхалки",
+                            android.widget.Toast.LENGTH_SHORT).show()
+                        true
+                    }
+                    player.prepareAsync()
+                } catch (_: Exception) {
+                    container.visibility = View.GONE
+                    releaseEasterEggPlayer()
+                    android.widget.Toast.makeText(this@SettingsMenuActivity,
+                        "Не удалось воспроизвести видео пасхалки",
+                        android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture,
+                width: Int, height: Int) = Unit
+            override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean = true
+            override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
+        }
+    }
+
+    private fun releaseEasterEggPlayer() {
+        try {
+            easterEggPlayer?.setSurface(null)
+            easterEggPlayer?.release()
+        } catch (_: Exception) { }
+        easterEggPlayer = null
+    }
+
+    private class AspectRatioTextureView(context: android.content.Context) : TextureView(context) {
+        private var videoWidth = 0
+        private var videoHeight = 0
+        fun setVideoSize(width: Int, height: Int) {
+            if (width > 0 && height > 0) {
+                videoWidth = width
+                videoHeight = height
+                requestLayout()
+            }
+        }
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val maxWidth = MeasureSpec.getSize(widthMeasureSpec)
+            val maxHeight = MeasureSpec.getSize(heightMeasureSpec)
+            if (videoWidth <= 0 || videoHeight <= 0 || maxWidth <= 0 || maxHeight <= 0) {
+                setMeasuredDimension(maxWidth, maxHeight)
                 return
             }
-
-            val video = VideoView(this).apply {
-                setBackgroundColor(0xFF000000.toInt())
-                setVideoURI(Uri.parse("android.resource://$packageName/${R.raw.easter_egg}"))
-                setOnPreparedListener { player ->
-                    player.isLooping = false
-                    start()
-                }
-                setOnCompletionListener {
-                    // Leave the inline player in place; no fullscreen transition or controls.
-                }
-                setOnErrorListener { _, _, _ ->
-                    android.widget.Toast.makeText(
-                        this@SettingsMenuActivity,
-                        "Не удалось воспроизвести видео пасхалки",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                    visibility = View.GONE
-                    true
-                }
+            val ratio = videoWidth.toFloat() / videoHeight.toFloat()
+            var width = maxWidth.toFloat()
+            var height = width / ratio
+            if (height > maxHeight) {
+                height = maxHeight.toFloat()
+                width = height * ratio
             }
-            easterEggVideo = video
-            content.addView(video, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(200)
-            ).apply {
-                topMargin = dp(12)
-            })
-            video.post {
-                video.start()
-                (content.parent as? ScrollView)?.smoothScrollTo(0, content.height)
-            }
+            setMeasuredDimension(width.toInt(), height.toInt())
         }
     }
 
     override fun onPause() {
-        easterEggVideo?.pause()
+        if (easterEggPlayer?.isPlaying == true) easterEggPlayer?.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
-        easterEggVideo?.stopPlayback()
-        easterEggVideo = null
+        releaseEasterEggPlayer()
+        easterEggTexture = null
+        easterEggContainer = null
         super.onDestroy()
     }
 
