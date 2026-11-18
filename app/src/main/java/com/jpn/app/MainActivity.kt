@@ -121,6 +121,7 @@ class MainActivity : Activity() {
     @Volatile private var downloadedSubscriptionName: String? = null
     @Volatile private var downloadedSubscriptionAnnouncement: String? = null
     @Volatile private var downloadedSubscriptionTraffic: String? = null
+    @Volatile private var downloadedSubscriptionMetadata: String? = null
 
     private val vpnStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -600,7 +601,10 @@ class MainActivity : Activity() {
                 val subscriptionName = downloadedSubscriptionName
                     ?: runCatching { URL(subscriptionUrl).host }.getOrNull()?.takeIf { it.isNotBlank() }
                 val subscriptionText = decodeSubscriptionBody(bodyMetadata.first)
-                val imported = parseSubscriptionEntries(subscriptionText)
+                val subscriptionMetadata = runCatching {
+                    downloadedSubscriptionMetadata?.let { JSONObject(it) }
+                }.getOrNull()
+                val imported = parseSubscriptionEntries(subscriptionText, subscriptionMetadata)
                 mainHandler.post {
                     nodes.clear()
                     nodes.addAll(imported)
@@ -609,6 +613,7 @@ class MainActivity : Activity() {
                         .putString(KEY_SUBSCRIPTION_NAME, subscriptionName)
                         .putString(KEY_SUBSCRIPTION_ANNOUNCE, subscriptionAnnouncement)
                         .putString(KEY_SUBSCRIPTION_TRAFFIC, downloadedSubscriptionTraffic)
+                        .putString("subscription_meta_json", subscriptionMetadata?.toString())
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
                         .apply()
                     AutoSubscriptionScheduler.update(this@MainActivity)
@@ -665,6 +670,7 @@ class MainActivity : Activity() {
             downloadedSubscriptionTraffic = connection.getHeaderField("subscription-userinfo")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
+            downloadedSubscriptionMetadata = SubscriptionMetadata.fromHeaders(connection.headerFields).toString()
             return String(output.toByteArray(), StandardCharsets.UTF_8)
         } finally {
             connection.disconnect()
@@ -988,8 +994,8 @@ class MainActivity : Activity() {
      * Imports every subscription entry independently. A failed entry is retained
      * as a private raw link and can be retried when the user taps it.
      */
-    private fun parseSubscriptionEntries(text: String): MutableList<JSONObject> =
-        SubscriptionParser.parseEntries(text)
+    private fun parseSubscriptionEntries(text: String, metadata: JSONObject? = null): MutableList<JSONObject> =
+        SubscriptionParser.parseEntries(text, metadata)
 
     /**
      * JPN only lists servers protected by TLS or REALITY.
