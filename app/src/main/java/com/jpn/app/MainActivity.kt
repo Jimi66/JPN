@@ -1426,11 +1426,6 @@ class MainActivity : Activity() {
         val subscriptionDns = selectedOutbound.optJSONObject("jpnSubscriptionDns")
         selected.remove("jpnSubscriptionDns")
 
-        val dnsOutbound = JSONObject()
-            .put("tag", "jpn-dns-out")
-            .put("protocol", "dns")
-            .put("settings", JSONObject())
-
         // Happ keeps the DoH hostname for TLS SNI and pins that hostname to
         // the resolver IP. Using https://1.1.1.1 directly can fail certificate
         // validation because the certificate is issued to cloudflare-dns.com.
@@ -1454,11 +1449,11 @@ class MainActivity : Activity() {
         SubscriptionMetadata.addResolveAddress(dnsHosts, selected, metadata)
         SubscriptionMetadata.addServerResolutionDns(dns, dnsHosts, selected, metadata)
 
-        // The selected proxy remains the default outbound: full tunnel only.
-        // No direct/freedom routes or site/application bypass rules are added.
-        val outbounds = JSONArray()
-            .put(selected)
-            .put(dnsOutbound)
+        // Match Happ's normal VPN mode: Android's system DNS server is
+        // reached through the selected proxy like all other traffic. Xray's
+        // DNS section remains available for resolving proxy/server hostnames.
+        // There is no separate DNS outbound or direct/site-routing exception.
+        val outbounds = JSONArray().put(selected)
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put("dns", dns)
@@ -1469,16 +1464,9 @@ class MainActivity : Activity() {
         config.put("jpnTunMtu", tunMtu)
         config.put("jpnSniffingEnabled", SubscriptionMetadata.boolean(metadata, "sniffing-enable") ?: true)
 
-        val routingRules = JSONArray().put(JSONObject()
-            .put("type", "field")
-            .put("inboundTag", JSONArray().put("jpn-tun-in"))
-            .put("network", "tcp,udp")
-            .put("port", "53")
-            .put("outboundTag", "jpn-dns-out"))
-
         config.put("routing", JSONObject()
             .put("domainStrategy", "AsIs")
-            .put("rules", routingRules))
+            .put("rules", JSONArray()))
         return config.toString()
     }
 
