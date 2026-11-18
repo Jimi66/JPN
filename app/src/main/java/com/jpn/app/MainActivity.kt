@@ -88,7 +88,6 @@ class MainActivity : Activity() {
         private const val KEY_VPN_STATE = "vpn_state"
         private const val KEY_SELECTED_NODE_INDEX = "selected_node_index"
         private const val VPN_REQUEST_CODE = 4102
-        private const val WIREGUARD_IMPORT_REQUEST_CODE = 4103
         const val ACTION_QUICK_SETTINGS_TOGGLE = "com.jpn.app.action.QUICK_SETTINGS_TOGGLE"
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
     }
@@ -602,10 +601,6 @@ class MainActivity : Activity() {
                     }
                     menu.add("Сканировать QR-код").setOnMenuItemClickListener {
                         scanSubscriptionQr()
-                        true
-                    }
-                    menu.add("Импорт WireGuard (.conf)").setOnMenuItemClickListener {
-                        chooseWireGuardConfig()
                         true
                     }
                 }.show()
@@ -1546,72 +1541,9 @@ class MainActivity : Activity() {
         return config.toString()
     }
 
-    private fun chooseWireGuardConfig() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "application/octet-stream"))
-        }
-        startActivityForResult(intent, WIREGUARD_IMPORT_REQUEST_CODE)
-    }
-
-    private fun importWireGuardConfig(uri: android.net.Uri) {
-        setStatus("Импортирую WireGuard-конфигурацию…")
-        Thread {
-            try {
-                val output = java.io.ByteArrayOutputStream()
-                contentResolver.openInputStream(uri)?.use { input ->
-                    val buffer = ByteArray(4096)
-                    var total = 0
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        total += count
-                        if (total > 1024 * 1024) {
-                            throw IllegalArgumentException("Файл WireGuard превышает 1 МБ")
-                        }
-                        output.write(buffer, 0, count)
-                    }
-                } ?: throw IllegalArgumentException("Не удалось открыть выбранный файл")
-
-                val displayName = runCatching {
-                    contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
-                        ?.use { cursor ->
-                            if (cursor.moveToFirst()) cursor.getString(0) else null
-                        }
-                }.getOrNull().orEmpty()
-                val serverName = displayName.substringBeforeLast(".").takeIf { it.isNotBlank() }
-                    ?: "WireGuard"
-                val text = String(output.toByteArray(), StandardCharsets.UTF_8)
-                val outbound = SubscriptionParser.parseWireGuardConfig(text, serverName)
-                mainHandler.post {
-                    nodes.add(outbound)
-                    selectedNodeIndex = nodes.lastIndex
-                    val editor = preferences.edit()
-                        .putString(KEY_SAVED_NODES, JSONArray(nodes).toString())
-                        .putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex)
-                    if (preferences.getString(KEY_SUBSCRIPTION_NAME, null).isNullOrBlank()) {
-                        editor.putString(KEY_SUBSCRIPTION_NAME, "WireGuard")
-                    }
-                    editor.apply()
-                    renderNodes()
-                    setStatus("WireGuard-конфигурация добавлена")
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    setStatus("Не удалось импортировать WireGuard: " + (error.message ?: "проверь файл конфигурации"))
-                }
-            }
-        }.start()
-    }
-
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == WIREGUARD_IMPORT_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) data?.data?.let { importWireGuardConfig(it) }
-            return
-        }
         if (requestCode != VPN_REQUEST_CODE) return
 
         val config = pendingXrayConfig
