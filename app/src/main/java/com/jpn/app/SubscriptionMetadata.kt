@@ -80,6 +80,22 @@ internal object SubscriptionMetadata {
         if (insecure != null) {
             stream.optJSONObject("tlsSettings")?.put("allowInsecure", insecure)
         }
+
+        val muxEnabled = boolean(metadata, "mux-enable")
+        val muxTcp = metadata.optString("mux-tcp-connections").toIntOrNull()
+            ?.takeIf { it in -1..1024 }
+        val muxXudp = metadata.optString("mux-xudp-connections").toIntOrNull()
+            ?.takeIf { it in -1..1024 }
+        val muxQuic = metadata.optString("mux-quic").lowercase()
+            .takeIf { it in setOf("reject", "allow", "skip") }
+        if (muxEnabled != null || muxTcp != null || muxXudp != null || muxQuic != null) {
+            val mux = outbound.optJSONObject("mux") ?: JSONObject()
+            muxEnabled?.let { mux.put("enabled", it) }
+            muxTcp?.let { mux.put("concurrency", it) }
+            muxXudp?.let { mux.put("xudpConcurrency", it) }
+            muxQuic?.let { mux.put("xudpProxyUDP443", it) }
+            outbound.put("mux", mux)
+        }
         return outbound
     }
 
