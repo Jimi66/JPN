@@ -23,17 +23,20 @@ internal object SubscriptionParser {
         return source
     }
 
-    fun parseEntries(text: String): MutableList<JSONObject> {
+    fun parseEntries(text: String, metadata: JSONObject? = null): MutableList<JSONObject> {
         val source = decodeBody(text)
         val imported = mutableListOf<JSONObject>()
         if (source.startsWith("{")) {
-            val outbounds = runCatching { JSONObject(source).optJSONArray("outbounds") }.getOrNull()
+            val rootConfig = runCatching { JSONObject(source) }.getOrNull()
+            val subscriptionDns = rootConfig?.optJSONObject("dns")
+            val outbounds = rootConfig?.optJSONArray("outbounds")
             if (outbounds != null) {
                 for (i in 0 until outbounds.length()) {
                     val outbound = outbounds.optJSONObject(i) ?: continue
                     if (!isSupportedOutbound(outbound)) continue
                     val copy = JSONObject(outbound.toString())
                     if (copy.optString("tag").isBlank()) copy.put("tag", "Сервер ${i + 1}")
+                    attachSubscriptionData(copy, metadata, subscriptionDns)
                     imported.add(copy)
                 }
                 return imported
@@ -53,7 +56,10 @@ internal object SubscriptionParser {
                 .getOrNull()?.takeIf { it.isNotBlank() } ?: "Сервер ${index + 1}"
             val scheme = link.substringBefore("://", "")
             if (scheme.equals("wireguard", true) || scheme.equals("wg", true)) {
-                runCatching { parseWireGuardLink(link, name) }.getOrNull()?.let { imported.add(it) }
+                runCatching { parseWireGuardLink(link, name) }.getOrNull()?.let {
+                    attachSubscriptionData(it, metadata, null)
+                    imported.add(it)
+                }
                 return@forEachIndexed
             }
             val request = JSONObject().put("apiVersion", 3)
@@ -67,9 +73,19 @@ internal object SubscriptionParser {
             if (!isSupportedOutbound(outbound)) return@forEachIndexed
             val copy = JSONObject(outbound.toString())
             if (copy.optString("tag").isBlank()) copy.put("tag", name)
+            attachSubscriptionData(copy, metadata, null)
             imported.add(copy)
         }
         return imported
+    }
+
+    private fun attachSubscriptionData(
+        outbound: JSONObject,
+        metadata: JSONObject?,
+        subscriptionDns: JSONObject?
+    ) {
+        metadata?.let { outbound.put("jpnSubscriptionMetadata", JSONObject(it.toString())) }
+        subscriptionDns?.let { outbound.put("jpnSubscriptionDns", JSONObject(it.toString())) }
     }
 
     private fun isSupportedOutbound(outbound: JSONObject): Boolean {
