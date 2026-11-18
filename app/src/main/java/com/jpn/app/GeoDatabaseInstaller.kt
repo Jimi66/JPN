@@ -1,62 +1,79 @@
 package com.jpn.app
 
 import android.content.Context
-import android.widget.Toast
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Downloads missing Xray GeoSite/GeoIP databases on the first app launch.
- * Existing valid databases are left untouched. Failed downloads are retried
- * the next time the app starts.
- */
+/** Validates and installs the GeoSite/GeoIP databases required before app use. */
 internal object GeoDatabaseInstaller {
     private const val PREFS = "jpn_settings"
     private const val GEO_DEFAULT =
         "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/"
-    @Volatile private var running = false
 
-    fun ensure(context: Context) {
-        val appContext = context.applicationContext
-        synchronized(this) {
-            if (running) return
-            val geoSite = File(appContext.filesDir, "geosite.dat")
-            val geoIp = File(appContext.filesDir, "geoip.dat")
-            val missing = listOf(
-                Triple("site_geosite_url", "geosite.dat", geoSite),
-                Triple("site_geoip_url", "geoip.dat", geoIp)
-            ).filter { (_, _, file) -> !isValidDatabase(file) }
-            if (missing.isEmpty()) return
-            running = true
-            Thread {
-                val failures = mutableListOf<String>()
-                try {
-                    val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    missing.forEach { (urlKey, fileName, _) ->
-                        val defaultName = fileName
-                        val address = prefs.getString(urlKey, null)
-                            ?.takeIf { it.isNotBlank() } ?: GEO_DEFAULT + defaultName
-                        runCatching { download(appContext.filesDir, address, fileName) }
-                            .onFailure { failures.add("$fileName: ${it.message ?: "ошибка загрузки"}") }
-                    }
-                } finally {
-                    running = false
-                }
-                if (failures.isNotEmpty()) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        Toast.makeText(
-                            appContext,
-                            "Не удалось загрузить базы GeoSite/GeoIP. Повторим при следующем запуске.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            }.start()
-        }
+    fun areDatabasesValid(context: Context): Boolean {
+        val dir = context.applicationContext.filesDir
+        return isValidDatabase(File(dir, "geosite.dat")) &&
+            isValidDatabase(File(dir, "geoip.dat"))
     }
 
-    private fun download(directory: File, address: String, fileName: String) {
+    fun installMissing(
+        context: Context,
+        onProgress: (Int, String) -> Unit,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        val appContext = context.applicationContext
+        Thread {
+            val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val items = listOf(
+                Triple("site_geosite_url", "geosite.dat", "GeoSite"),
+                Triple("site_geoip_url", "geoip.dat", "GeoIP")
+            ).filter { (_, fileName, _) ->
+                !isValidDatabase(File(appContext.filesDir, fileName))
+            }
+            if (items.isEmpty()) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    onComplete(true, "Обе базы уже установлены")
+                }
+                return@Thread
+            }
+
+            var completed = 0
+            val errors = mutableListOf<String>()
+            items.forEach { (urlKey, fileName, label) ->
+                val address = prefs.getString(urlKey, null)?.takeIf { it.isNotBlank() }
+                    ?: GEO_DEFAULT + fileName
+                try {
+                    download(appContext.filesDir, address, fileName) { filePercent ->
+                        val overall = ((completed * 100) + filePercent) / items.size
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            onProgress(overall, "Загрузка $label… $filePercent%")
+                        }
+                    }
+                    completed++
+                    val overall = completed * 100 / items.size
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        onProgress(overall, "$label загружена")
+                    }
+                } catch (error: Exception) {
+                    errors.add("$label: ${error.message ?: "ошибка загрузки"}")
+                }
+            }
+            val success = errors.isEmpty() && areDatabasesValid(appContext)
+            val details = if (success) "Базы GeoSite и GeoIP успешно загружены"
+                else errors.joinToString("\n").ifBlank { "Не удалось проверить загруженные базы" }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                onComplete(success, details)
+            }
+        }.start()
+    }
+
+    private fun download(
+        directory: File,
+        address: String,
+        fileName: String,
+        onProgress: (Int) -> Unit
+    ) {
         var connection: HttpURLConnection? = null
         val temp = File(directory, "$fileName.tmp")
         try {
@@ -69,6 +86,7 @@ internal object GeoDatabaseInstaller {
             if (connection.responseCode !in 200..299) {
                 throw IllegalStateException("HTTP ${connection.responseCode}")
             }
+            val expected = connection.contentLengthLong
             connection.inputStream.use { input ->
                 temp.outputStream().use { output ->
                     val buffer = ByteArray(32 * 1024)
@@ -81,6 +99,7 @@ internal object GeoDatabaseInstaller {
                             throw IllegalStateException("Файл больше 100 МБ")
                         }
                         output.write(buffer, 0, count)
+                        if (expected > 0) onProgress((total * 100 / expected).toInt().coerceIn(0, 99))
                     }
                     if (total < 1024) throw IllegalStateException("Файл слишком маленький")
                 }
@@ -100,6 +119,7 @@ internal object GeoDatabaseInstaller {
                 throw IllegalStateException("Не удалось установить базу")
             }
             backup.delete()
+            onProgress(100)
         } catch (error: Exception) {
             temp.delete()
             throw error
