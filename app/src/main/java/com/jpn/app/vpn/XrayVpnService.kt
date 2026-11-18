@@ -58,6 +58,7 @@ class XrayVpnService : VpnService() {
 
     private lateinit var workerThread: HandlerThread
     private lateinit var workerHandler: Handler
+    @Volatile private var latestStartId: Int = 0
 
     // All native Xray and TUN lifecycle operations are serialized on this thread.
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
@@ -78,6 +79,7 @@ class XrayVpnService : VpnService() {
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         when (intent?.action) {
             ACTION_STOP -> {
                 val requestedTestMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false)
@@ -90,8 +92,12 @@ class XrayVpnService : VpnService() {
                         testMode
                     )
                     testMode = false
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf(startId)
+                    if (startId == latestStartId) {
+                        if (startId == latestStartId) {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf(startId)
+                        }
+                    }
                 }
                 return START_NOT_STICKY
             }
