@@ -1420,29 +1420,53 @@ class MainActivity : Activity() {
     }
 
     private fun buildXrayConfig(selectedOutbound: JSONObject): String {
-        // All ordinary traffic uses the selected server. DNS packets from the
-        // Android TUN are handed to Xray's DNS outbound and resolved over DoH.
+        val metadata = selectedOutbound.optJSONObject("jpnSubscriptionMetadata")
+        val selected = SubscriptionMetadata.applyToOutbound(selectedOutbound)
+        selected.remove("jpnSubscriptionMetadata")
+        val subscriptionDns = selectedOutbound.optJSONObject("jpnSubscriptionDns")
+        selected.remove("jpnSubscriptionDns")
+
         val dnsOutbound = JSONObject()
             .put("tag", "jpn-dns-out")
             .put("protocol", "dns")
             .put("settings", JSONObject())
 
-        // IP-literal DoH endpoints avoid a bootstrap DNS dependency.
-        val dns = JSONObject()
-            .put("servers", JSONArray()
-                .put("https://1.1.1.1/dns-query")
-                .put("https://8.8.8.8/dns-query"))
-            .put("queryStrategy", "UseIP")
+        // Happ keeps the DoH hostname for TLS SNI and pins that hostname to
+        // the resolver IP. Using https://1.1.1.1 directly can fail certificate
+        // validation because the certificate is issued to cloudflare-dns.com.
+        val useSubscriptionDns = SubscriptionMetadata.boolean(metadata, "dns-from-json-enable") == true &&
+            subscriptionDns?.optJSONArray("servers") != null
+        val dns = if (useSubscriptionDns) {
+            JSONObject(subscriptionDns!!.toString())
+        } else {
+            JSONObject()
+                .put("servers", JSONArray()
+                    .put("https://cloudflare-dns.com/dns-query")
+                    .put("https://dns.google/dns-query"))
+                .put("hosts", JSONObject()
+                    .put("cloudflare-dns.com", "1.1.1.1")
+                    .put("dns.google", "8.8.8.8")
+                    .put("domain:googleapis.cn", "googleapis.com"))
+                .put("queryStrategy", SubscriptionMetadata.preferredIpQueryStrategy(metadata))
+        }
 
-        // The selected proxy is the first/default outbound. There are no
-        // freedom/direct routes or GeoSite/GeoIP/manual bypass rules.
+        val dnsHosts = dns.optJSONObject("hosts") ?: JSONObject().also { dns.put("hosts", it) }
+        SubscriptionMetadata.addResolveAddress(dnsHosts, selected, metadata)
+
+        // The selected proxy remains the default outbound: full tunnel only.
+        // No direct/freedom routes or site/application bypass rules are added.
         val outbounds = JSONArray()
-            .put(JSONObject(selectedOutbound.toString()))
+            .put(selected)
             .put(dnsOutbound)
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put("dns", dns)
             .put("outbounds", outbounds)
+
+        val tunMtu = metadata?.optString("xray-tun-mtu")?.toIntOrNull()
+            ?.takeIf { it in 1280..9000 } ?: 1500
+        config.put("jpnTunMtu", tunMtu)
+        config.put("jpnSniffingEnabled", SubscriptionMetadata.boolean(metadata, "sniffing-enable") ?: true)
 
         val routingRules = JSONArray().put(JSONObject()
             .put("type", "field")
