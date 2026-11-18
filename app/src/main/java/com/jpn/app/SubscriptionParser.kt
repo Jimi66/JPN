@@ -46,11 +46,16 @@ internal object SubscriptionParser {
         }
         val links = source.lineSequence().map { it.trim() }.filter { line ->
             val scheme = line.substringBefore("://", "")
-            line.contains("://") && scheme.matches(Regex("(?i)vless|vmess|trojan|ss|socks|hysteria2|hy2"))
+            line.contains("://") && scheme.matches(Regex("(?i)vless|vmess|trojan|ss|socks|hysteria2|hy2|wireguard|wg"))
         }
         links.forEachIndexed { index, link ->
             val name = runCatching { Uri.decode(Uri.parse(link).fragment.orEmpty()) }
                 .getOrNull()?.takeIf { it.isNotBlank() } ?: "Сервер ${index + 1}"
+            val scheme = link.substringBefore("://", "")
+            if (scheme.equals("wireguard", true) || scheme.equals("wg", true)) {
+                runCatching { parseWireGuardLink(link, name) }.getOrNull()?.let { imported.add(it) }
+                return@forEachIndexed
+            }
             val request = JSONObject().put("apiVersion", 3)
                 .put("method", "convertShareLinksToXrayJson")
                 .put("payload", JSONObject().put("text", link))
@@ -71,6 +76,41 @@ internal object SubscriptionParser {
         if (outbound.optString("protocol").equals("wireguard", true)) return true
         val security = outbound.optJSONObject("streamSettings")?.optString("security") ?: return false
         return security.equals("tls", true) || security.equals("reality", true)
+    }
+
+    /** Converts wireguard:// or wg:// subscription links into Xray WireGuard outbound JSON. */
+    private fun parseWireGuardLink(raw: String, name: String): JSONObject {
+        val uri = java.net.URI(raw.trim())
+        val privateKey = uri.rawUserInfo?.let { Uri.decode(it) }
+            ?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("В WireGuard-ссылке отсутствует приватный ключ")
+        val host = uri.host?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("В WireGuard-ссылке указан неверный адрес сервера")
+        if (uri.port !in 1..65535) throw IllegalArgumentException("В WireGuard-ссылке указан неверный порт")
+        val params = linkedMapOf<String, String>()
+        uri.rawQuery.orEmpty().split("&").filter { it.isNotBlank() }.forEach { item ->
+            val key = Uri.decode(item.substringBefore("=")).lowercase()
+            val value = Uri.decode(item.substringAfter("=", ""))
+            if (key.isNotBlank()) params[key] = value
+        }
+        val address = params["address"]?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("В WireGuard-ссылке отсутствует параметр address")
+        val publicKey = params["publickey"]?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("В WireGuard-ссылке отсутствует параметр publickey")
+        val conf = buildString {
+            append("[Interface]\\n")
+            append("PrivateKey = ").append(privateKey).append('\\n')
+            append("Address = ").append(address).append('\\n')
+            params["mtu"]?.let { append("MTU = ").append(it).append('\\n') }
+            params["dns"]?.let { append("DNS = ").append(it).append('\\n') }
+            append("[Peer]\\n")
+            append("PublicKey = ").append(publicKey).append('\\n')
+            append("Endpoint = ").append(host).append(':').append(uri.port).append('\\n')
+            params["allowedips"]?.let { append("AllowedIPs = ").append(it).append('\\n') }
+            params["presharedkey"]?.let { append("PresharedKey = ").append(it).append('\\n') }
+            params["persistentkeepalive"]?.let { append("PersistentKeepalive = ").append(it).append('\\n') }
+        }
+        return parseWireGuardConfig(conf, name)
     }
 
     /** Converts a standard WireGuard client .conf into Xray's WireGuard outbound JSON. */
@@ -152,7 +192,7 @@ internal object SubscriptionParser {
         return lower.startsWith("vless://") || lower.startsWith("vmess://") ||
             lower.startsWith("trojan://") || lower.startsWith("ss://") ||
             lower.startsWith("socks://") || lower.startsWith("hysteria2://") ||
-            lower.startsWith("hy2://") || lower.startsWith("{") || lower.startsWith("[interface]") ||
+            lower.startsWith("hy2://") || lower.startsWith("wireguard://") || lower.startsWith("wg://") || lower.startsWith("{") || lower.startsWith("[interface]") ||
             lower.contains("\nvless://") || lower.contains("\nvmess://") ||
             lower.contains("\ntrojan://") || lower.contains("\nss://") ||
             lower.contains("\nsocks://") || lower.contains("\nhysteria2://") ||
