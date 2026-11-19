@@ -90,12 +90,8 @@ class SettingsMenuActivity : Activity() {
             setPadding(0, dp(18), 0, dp(10))
         })
         val tunItems = sectionCard(cardColor, borderColor)
-        addSubItem(tunItems, "Автообновление подписки", textColor, secondaryColor) {
-            startActivity(Intent(this, SubscriptionAutoUpdateActivity::class.java))
-        }
-        addDivider(tunItems, borderColor)
-        addSubItem(tunItems, "Автообновление Geo-баз", textColor, secondaryColor) {
-            startActivity(Intent(this, GeoDatabaseAutoUpdateActivity::class.java))
+        addSubItem(tunItems, "Автообновление", textColor, secondaryColor) {
+            startActivity(Intent(this, AutoUpdateMenuActivity::class.java))
         }
         addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
