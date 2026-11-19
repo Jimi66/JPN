@@ -60,6 +60,11 @@ internal object GeoDatabaseInstaller {
                 }
             }
             val success = errors.isEmpty() && areDatabasesValid(appContext)
+            if (success && items.isNotEmpty()) {
+                prefs.edit()
+                    .putLong(GeoDatabaseAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
+                    .apply()
+            }
             val details = if (success) "Базы GeoSite и GeoIP успешно загружены"
                 else errors.joinToString("\n").ifBlank { "Не удалось проверить загруженные базы" }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -94,6 +99,9 @@ internal object GeoDatabaseInstaller {
         if (!areDatabasesValid(appContext)) {
             throw IllegalStateException("Не удалось проверить обновлённые Geo-базы")
         }
+        prefs.edit()
+            .putLong(GeoDatabaseAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
+            .apply()
     }
 
     private fun download(
