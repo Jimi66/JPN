@@ -8,10 +8,14 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SubscriptionAutoUpdateActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("jpn_settings", MODE_PRIVATE) }
     private lateinit var intervalValue: TextView
+    private lateinit var lastUpdateValue: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,9 +81,39 @@ class SubscriptionAutoUpdateActivity : Activity() {
             text = "Подписка обновляется в фоновом режиме при наличии интернета. Android может немного сдвигать время запуска."
             textSize = 13f; setTextColor(secondary); setPadding(dp(4), dp(12), dp(4), 0)
         })
+        val divider = android.view.View(this).apply {
+            setBackgroundColor(if (dark) 0xFF777777.toInt() else 0xFF202124.toInt())
+        }
+        root.addView(divider, LinearLayout.LayoutParams(-1, dp(1)).apply {
+            topMargin = dp(24)
+            marginStart = dp(4)
+            marginEnd = dp(4)
+        })
+        lastUpdateValue = TextView(this).apply {
+            textSize = 16f
+            setTextColor(if (dark) 0xFFAAA4E0.toInt() else 0xFF355A83.toInt())
+            setPadding(dp(2), dp(18), dp(2), 0)
+        }
+        root.addView(lastUpdateValue)
         updateIntervalLabel()
+        updateLastUpdateLabel()
         setContentView(root)
         JpnTheme.apply(this, root)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::lastUpdateValue.isInitialized) updateLastUpdateLabel()
+    }
+
+    private fun updateLastUpdateLabel() {
+        val timestamp = prefs.getLong(KEY_LAST_UPDATE, 0L)
+        val formatted = if (timestamp > 0L) {
+            SimpleDateFormat("dd.MM.yyyy, HH:mm", Locale.getDefault()).format(Date(timestamp))
+        } else {
+            "ещё не выполнялось"
+        }
+        lastUpdateValue.text = "Последнее обновление: $formatted"
     }
 
     private fun showIntervalPicker() {
@@ -101,6 +135,7 @@ class SubscriptionAutoUpdateActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        const val KEY_LAST_UPDATE = "last_subscription_update_time"
         const val KEY_ENABLED = "subscription_auto_update_enabled"
         const val KEY_INTERVAL = "subscription_auto_update_interval_hours"
         const val DEFAULT_INTERVAL = 12
