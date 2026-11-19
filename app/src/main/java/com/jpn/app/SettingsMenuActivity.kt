@@ -145,7 +145,7 @@ class SettingsMenuActivity : Activity() {
         releaseEasterEggPlayer()
         videoPrepared = false
         videoCompleted = false
-        val container = FrameLayout(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        val container = FrameLayout(this).apply {\n            setBackgroundColor(0xFF000000.toInt())\n            alpha = 0f\n        }
         val texture = AspectRatioTextureView(this)
         container.addView(texture, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER
@@ -172,16 +172,20 @@ class SettingsMenuActivity : Activity() {
                     player.setOnPreparedListener { mp ->
                         videoPrepared = true
                         mp.isLooping = false
+                        container.animate()
+                            .alpha(1f)
+                            .setDuration(350L)
+                            .start()
                         mp.start()
                     }
                     player.setOnCompletionListener {
                         videoCompleted = true
                         videoPrepared = false
-                        container.visibility = View.GONE
+                        hideEasterEggContainer(container)
                         releaseEasterEggPlayer()
                     }
                     player.setOnErrorListener { _, _, _ ->
-                        container.visibility = View.GONE
+                        hideEasterEggContainer(container)
                         videoCompleted = true
                         videoPrepared = false
                         releaseEasterEggPlayer()
@@ -192,7 +196,7 @@ class SettingsMenuActivity : Activity() {
                     }
                     player.prepareAsync()
                 } catch (_: Exception) {
-                    container.visibility = View.GONE
+                    hideEasterEggContainer(container)
                     releaseEasterEggPlayer()
                     android.widget.Toast.makeText(this@SettingsMenuActivity,
                         "Не удалось воспроизвести видео пасхалки",
@@ -204,6 +208,16 @@ class SettingsMenuActivity : Activity() {
             override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean = true
             override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
         }
+    }
+
+    private fun hideEasterEggContainer(container: FrameLayout) {
+        container.animate()
+            .alpha(0f)
+            .setDuration(250L)
+            .withEndAction {
+                container.visibility = View.GONE
+            }
+            .start()
     }
 
     private fun releaseEasterEggPlayer() {
