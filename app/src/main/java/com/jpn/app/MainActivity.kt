@@ -708,6 +708,7 @@ class MainActivity : Activity() {
                         .putString(KEY_SUBSCRIPTION_TRAFFIC, downloadedSubscriptionTraffic)
                         .putString("subscription_meta_json", subscriptionMetadata?.toString())
                         .putString(KEY_SAVED_NODES, JSONArray(imported).toString())
+                        .putLong(SubscriptionAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
                         .apply()
                     AutoSubscriptionScheduler.update(this@MainActivity)
                     renderNodes()
