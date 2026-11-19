@@ -145,7 +145,10 @@ class SettingsMenuActivity : Activity() {
         releaseEasterEggPlayer()
         videoPrepared = false
         videoCompleted = false
-        val container = FrameLayout(this).apply {\n            setBackgroundColor(0xFF000000.toInt())\n            alpha = 0f\n        }
+        val container = FrameLayout(this).apply {
+            setBackgroundColor(0xFF000000.toInt())
+            alpha = 0f
+        }
         val texture = AspectRatioTextureView(this)
         container.addView(texture, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER
