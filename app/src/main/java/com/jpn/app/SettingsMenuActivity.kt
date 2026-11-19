@@ -90,16 +90,16 @@ class SettingsMenuActivity : Activity() {
             setPadding(0, dp(18), 0, dp(10))
         })
         val tunItems = sectionCard(cardColor, borderColor)
-        addSubItem(tunItems, "Автообновление", textColor, secondaryColor) {
-            startActivity(Intent(this, AutoUpdateMenuActivity::class.java))
-        }
-        addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
             startActivity(Intent(this, AppRoutingActivity::class.java))
         }
         addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Маршрутизация сайтов", textColor, secondaryColor) {
             startActivity(Intent(this, SiteRoutingActivity::class.java))
+        }
+        addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Автообновление", textColor, secondaryColor) {
+            startActivity(Intent(this, AutoUpdateMenuActivity::class.java))
         }
         content.addView(tunItems, sectionParams())
 
