@@ -168,12 +168,85 @@ class MainActivity : Activity() {
         appliedDarkTheme = JpnTheme.isDark(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
-        continueMainInitialization()
+        ensureGeoDatabasesBeforeUse()
 
     }
 
 
+    private fun ensureGeoDatabasesBeforeUse() {
+        if (GeoDatabaseInstaller.areDatabasesValid(this)) {
+            continueMainInitialization()
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(8))
+        }
+        val message = TextView(this).apply {
+            text = "Для корректной работы маршрутизации необходимы базы GeoSite и GeoIP. Загрузите их, чтобы продолжить."
+            textSize = 14f
+            setTextColor(JpnTheme.textPrimary(this@MainActivity))
+        }
+        val progressText = TextView(this).apply {
+            text = "Базы не загружены"
+            textSize = 13f
+            setPadding(0, dp(14), 0, dp(6))
+            setTextColor(JpnTheme.textSecondary(this@MainActivity))
+        }
+        val progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+        }
+        content.addView(message, matchWidth())
+        content.addView(progressText, matchWidth())
+        content.addView(progress, LinearLayout.LayoutParams(-1, dp(8)))
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Требуется загрузить базы")
+            .setView(content)
+            .setCancelable(false)
+            .setNegativeButton("Выход") { _, _ -> finish() }
+            .setPositiveButton("Обновить базы", null)
+            .create()
+
+        dialog.setOnShowListener {
+            val updateButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            updateButton.setOnClickListener {
+                updateButton.isEnabled = false
+                progress.progress = 0
+                progressText.text = "Подготовка загрузки…"
+                GeoDatabaseInstaller.installMissing(this,
+                    onProgress = { percent, status ->
+                        runOnUiThread {
+                            if (!isFinishing && dialog.isShowing) {
+                                progress.progress = percent
+                                progressText.text = status
+                            }
+                        }
+                    },
+                    onComplete = { success, details ->
+                        runOnUiThread {
+                            if (isFinishing || isDestroyed || !dialog.isShowing) return@runOnUiThread
+                            if (success && GeoDatabaseInstaller.areDatabasesValid(this)) {
+                                progress.progress = 100
+                                progressText.text = "Обе базы успешно загружены"
+                                dialog.dismiss()
+                                continueMainInitialization()
+                            } else {
+                                progressText.text = details
+                                updateButton.isEnabled = true
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        dialog.show()
+    }
+
     private fun continueMainInitialization() {
+        DefaultSiteRoutingRules.ensure(this)
         restoreSavedSubscription()
         AutoSubscriptionScheduler.update(this)
         refreshVpnState()
@@ -218,6 +291,25 @@ class MainActivity : Activity() {
             recreate()
             return
         }
+        applyPendingSiteRoutingRestart()
+    }
+
+    private fun applyPendingSiteRoutingRestart() {
+        if (!preferences.getBoolean("site_routing_restart_pending", false)) return
+        preferences.edit().remove("site_routing_restart_pending").apply()
+        if (!isVpnRunning()) return
+
+        if (selectedNodeIndex !in nodes.indices) {
+            selectedNodeIndex = preferences.getInt(KEY_SELECTED_NODE_INDEX, -1)
+        }
+        val selected = nodes.getOrNull(selectedNodeIndex)
+        if (selected == null) {
+            setStatus("Не удалось автоматически применить маршрутизацию: выбранный сервер не найден")
+            return
+        }
+        val name = selected.optString("tag").ifBlank { "Сервер ${selectedNodeIndex + 1}" }
+        setStatus("Применяю правила маршрутизации сайтов…")
+        connectToOutbound(selected, name)
     }
 
     private fun applyMainIconTint(button: ImageButton) {
@@ -1420,6 +1512,11 @@ class MainActivity : Activity() {
     }
 
     private fun buildXrayConfig(selectedOutbound: JSONObject): String {
+        val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        val directOutbound = JSONObject()
+            .put("tag", "jpn-direct")
+            .put("protocol", "freedom")
+            .put("settings", JSONObject())
         val metadata = selectedOutbound.optJSONObject("jpnSubscriptionMetadata")
         val selected = SubscriptionMetadata.applyToOutbound(selectedOutbound)
         selected.remove("jpnSubscriptionMetadata")
@@ -1457,20 +1554,64 @@ class MainActivity : Activity() {
         // reached through the selected proxy like all other traffic. Xray's
         // DNS section remains available for resolving proxy/server hostnames.
         // There is no separate DNS outbound or direct/site-routing exception.
-        val outbounds = JSONArray().put(selected)
+        val outbounds = JSONArray().put(selected).put(directOutbound)
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put("dns", dns)
             .put("outbounds", outbounds)
+            .put("env", JSONObject().put("xray.location.asset", filesDir.absolutePath))
 
         val tunMtu = metadata?.optString("xray-tun-mtu")?.toIntOrNull()
             ?.takeIf { it in 1280..9000 } ?: 1500
         config.put("jpnTunMtu", tunMtu)
         config.put("jpnSniffingEnabled", SubscriptionMetadata.boolean(metadata, "sniffing-enable") ?: true)
 
+        val routingRules = JSONArray()
+        if (routingPreferences.getBoolean("site_routing_enabled", false)) {
+            val domains = JSONArray()
+            routingPreferences.getString("site_direct_geosite", "").orEmpty()
+                .lineSequence().map { it.trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { category -> domains.put("geosite:$category") }
+            routingPreferences.getString("site_manual_domains", "").orEmpty()
+                .lineSequence().map { it.substringBefore("#").trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { entry ->
+                    val rule = when {
+                        entry.startsWith("domain:", true) ||
+                            entry.startsWith("full:", true) ||
+                            entry.startsWith("regexp:", true) ||
+                            entry.startsWith("geosite:", true) -> entry
+                        else -> "domain:$entry"
+                    }
+                    domains.put(rule)
+                }
+
+            val ips = JSONArray()
+            routingPreferences.getString("site_direct_geoip", "").orEmpty()
+                .lineSequence().map { it.trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { category -> ips.put("geoip:$category") }
+            routingPreferences.getString("site_manual_ips", "").orEmpty()
+                .lineSequence().map { it.substringBefore("#").trim() }.filter { it.isNotBlank() }
+                .distinct().forEach { ips.put(it) }
+
+            // Xray combines conditions within one rule using AND semantics.
+            // Domain and IP matches must therefore use separate direct rules.
+            if (domains.length() > 0) {
+                routingRules.put(JSONObject()
+                    .put("type", "field")
+                    .put("domain", domains)
+                    .put("outboundTag", "jpn-direct"))
+            }
+            if (ips.length() > 0) {
+                routingRules.put(JSONObject()
+                    .put("type", "field")
+                    .put("ip", ips)
+                    .put("outboundTag", "jpn-direct"))
+            }
+        }
+
         config.put("routing", JSONObject()
             .put("domainStrategy", "AsIs")
-            .put("rules", JSONArray()))
+            .put("rules", routingRules))
         return config.toString()
     }
 

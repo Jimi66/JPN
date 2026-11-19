@@ -97,6 +97,10 @@ class SettingsMenuActivity : Activity() {
         addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
             startActivity(Intent(this, AppRoutingActivity::class.java))
         }
+        addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Маршрутизация сайтов", textColor, secondaryColor) {
+            startActivity(Intent(this, SiteRoutingActivity::class.java))
+        }
         content.addView(tunItems, sectionParams())
 
         // Keep the discreet credits and the seven-tap video easter egg

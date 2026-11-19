@@ -21,6 +21,9 @@
             android:name=".AppRoutingActivity"
             android:exported="false" />
         <activity
+            android:name=".SiteRoutingActivity"
+            android:exported="false" />
+        <activity
             android:name=".SettingsMenuActivity"
             android:exported="false" />
         <activity
