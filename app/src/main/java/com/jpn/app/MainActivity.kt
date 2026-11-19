@@ -249,6 +249,7 @@ class MainActivity : Activity() {
         DefaultSiteRoutingRules.ensure(this)
         restoreSavedSubscription()
         AutoSubscriptionScheduler.update(this)
+        AutoGeoDatabaseScheduler.update(this)
         refreshVpnState()
         handleQuickSettingsIntent(intent)
         if (nodes.isEmpty() && !launchedFromQuickSettings) {
