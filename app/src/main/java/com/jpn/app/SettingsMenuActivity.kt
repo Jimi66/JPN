@@ -181,7 +181,7 @@ class SettingsMenuActivity : Activity() {
                         texture.setVideoSize(sourceWidth, sourceHeight)
                         if (sourceWidth > 0 && sourceHeight > 0) {
                             container.layoutParams = container.layoutParams.apply {
-                                height = (videoWidth * sourceHeight.toFloat() / sourceWidth).toInt()
+                                this.height = (videoWidth * sourceHeight.toFloat() / sourceWidth).toInt()
                             }
                         }
                     }
