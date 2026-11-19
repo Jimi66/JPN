@@ -67,6 +67,7 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                 .putString("subscription_traffic", traffic)
                 .putString("subscription_meta_json", metadata?.toString())
                 .putString("saved_nodes_json", JSONArray(nodes).toString())
+                .putLong(SubscriptionAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
                 .apply()
             Result.success()
         } catch (_: Exception) { Result.retry() }
