@@ -86,7 +86,7 @@ class SettingsMenuActivity : Activity() {
         }
         content.addView(generalItems, sectionParams())
 
-        content.addView(sectionTitle("Дополнительные настройки", textColor).apply {
+        content.addView(sectionTitle("Настройки Tun режима", textColor).apply {
             setPadding(0, dp(18), 0, dp(10))
         })
         val tunItems = sectionCard(cardColor, borderColor)
