@@ -99,7 +99,7 @@ class GeoDatabaseAutoUpdateActivity : Activity() {
         })
 
         root.addView(TextView(this).apply {
-            text = "GeoSite и GeoIP обновляются в фоновом режиме при наличии интернета. Новые файлы устанавливаются только после успешной загрузки и проверки. Android может немного сдвигать время запуска."
+            text = "GeoSite и GeoIP обновляются в фоновом режиме при наличии интернета. Новые файлы устанавливаются только после успешной загрузки и проверки и используются при следующем запуске VPN. Android может немного сдвигать время запуска."
             textSize = 13f
             setTextColor(secondary)
             setPadding(dp(4), dp(12), dp(4), 0)
