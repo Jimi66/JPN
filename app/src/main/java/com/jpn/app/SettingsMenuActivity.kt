@@ -94,6 +94,10 @@ class SettingsMenuActivity : Activity() {
             startActivity(Intent(this, SubscriptionAutoUpdateActivity::class.java))
         }
         addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Автообновление Geo-баз", textColor, secondaryColor) {
+            startActivity(Intent(this, GeoDatabaseAutoUpdateActivity::class.java))
+        }
+        addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
             startActivity(Intent(this, AppRoutingActivity::class.java))
         }
