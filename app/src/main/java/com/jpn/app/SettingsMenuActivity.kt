@@ -145,8 +145,13 @@ class SettingsMenuActivity : Activity() {
         releaseEasterEggPlayer()
         videoPrepared = false
         videoCompleted = false
+        val videoWidth = ((content.width - content.paddingLeft - content.paddingRight) * 0.74f).toInt()
         val container = FrameLayout(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF000000.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+            clipToOutline = true
             alpha = 0f
         }
         val texture = AspectRatioTextureView(this)
@@ -156,8 +161,11 @@ class SettingsMenuActivity : Activity() {
         easterEggContainer = container
         easterEggTexture = texture
         content.addView(container, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(200)
-        ).apply { topMargin = dp(12) })
+            videoWidth, dp(180)
+        ).apply {
+            topMargin = dp(12)
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
         container.post { (content.parent as? ScrollView)?.smoothScrollTo(0, content.height) }
 
         texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -169,8 +177,13 @@ class SettingsMenuActivity : Activity() {
                     player.setDataSource(this@SettingsMenuActivity,
                         Uri.parse("android.resource://$packageName/${R.raw.easter_egg}"))
                     player.setSurface(Surface(surfaceTexture))
-                    player.setOnVideoSizeChangedListener { _, videoWidth, videoHeight ->
-                        texture.setVideoSize(videoWidth, videoHeight)
+                    player.setOnVideoSizeChangedListener { _, sourceWidth, sourceHeight ->
+                        texture.setVideoSize(sourceWidth, sourceHeight)
+                        if (sourceWidth > 0 && sourceHeight > 0) {
+                            container.layoutParams = container.layoutParams.apply {
+                                height = (videoWidth * sourceHeight.toFloat() / sourceWidth).toInt()
+                            }
+                        }
                     }
                     player.setOnPreparedListener { mp ->
                         videoPrepared = true
