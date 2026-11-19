@@ -68,6 +68,34 @@ internal object GeoDatabaseInstaller {
         }.start()
     }
 
+    /** Downloads and atomically installs fresh copies of both Geo databases. */
+    fun updateDatabases(context: Context) {
+        val appContext = context.applicationContext
+        val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val items = listOf(
+            Triple("site_geosite_url", "geosite.dat", "GeoSite"),
+            Triple("site_geoip_url", "geoip.dat", "GeoIP")
+        )
+        val errors = mutableListOf<String>()
+
+        items.forEach { (urlKey, fileName, label) ->
+            val address = prefs.getString(urlKey, null)?.takeIf { it.isNotBlank() }
+                ?: GEO_DEFAULT + fileName
+            try {
+                download(appContext.filesDir, address, fileName) { }
+            } catch (error: Exception) {
+                errors.add("$label: ${error.message ?: "ошибка загрузки"}")
+            }
+        }
+
+        if (errors.isNotEmpty()) {
+            throw IllegalStateException(errors.joinToString("; "))
+        }
+        if (!areDatabasesValid(appContext)) {
+            throw IllegalStateException("Не удалось проверить обновлённые Geo-базы")
+        }
+    }
+
     private fun download(
         directory: File,
         address: String,
