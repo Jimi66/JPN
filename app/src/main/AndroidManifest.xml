@@ -27,6 +27,9 @@
             android:name=".SettingsMenuActivity"
             android:exported="false" />
         <activity
+            android:name=".GeoDatabaseAutoUpdateActivity"
+            android:exported="false" />
+        <activity
             android:name=".SubscriptionAutoUpdateActivity"
             android:exported="false" />
         <activity
