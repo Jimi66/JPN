@@ -66,8 +66,7 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                 if (lineText.startsWith("#announce:", true)) {
                     bodyAnnouncement = decodeAnnouncement(lineText.substringAfter(":")); false
                 } else true
-            }.joinToString("
-")
+            }.joinToString("\n")
             val subscription = SubscriptionParser.decodeBody(cleaned)
             val nodes = SubscriptionParser.parseEntries(subscription, metadata)
             if (nodes.isEmpty()) throw IllegalStateException("No compatible servers in subscription")
