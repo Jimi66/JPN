@@ -322,6 +322,51 @@ def patch_manual_captcha(client: Path) -> None:
     path.write_text(source, encoding="utf-8")
 
 
+
+def patch_captcha_diagnostics(client: Path) -> None:
+    path = client / "manual_captcha.go"
+    source = path.read_text(encoding="utf-8")
+
+    source = replace_once(
+        source,
+        '\t\tlog.Printf("[Captcha Proxy] HTTP %s %s", r.Method, r.URL.String())',
+        '\t\tlog.Printf("[Captcha Proxy] Page request: %s %s", r.Method, r.URL.Path)',
+        "avoid logging CAPTCHA query parameters",
+    )
+
+    source = replace_once(
+        source,
+        '\tmux.HandleFunc("/generic_proxy", func(w http.ResponseWriter, r *http.Request) {\n'
+        '\t\ttargetAuthURL := r.URL.Query().Get("proxy_url")',
+        '\tmux.HandleFunc("/generic_proxy", func(w http.ResponseWriter, r *http.Request) {\n'
+        '\t\tlog.Printf("[Captcha Proxy] Resource request: %s %s", r.Method, r.URL.Path)\n'
+        '\t\ttargetAuthURL := r.URL.Query().Get("proxy_url")',
+        "log CAPTCHA resource requests without query strings",
+    )
+
+    source = replace_once(
+        source,
+        '\t\t\tif strings.Contains(res.Request.URL.Path, "captchaNotRobot.check") {\n'
+        '\t\t\t\tnotifyKey(keyCh, extractSuccessToken(bodyBytes))\n'
+        '\t\t\t}\n'
+        '\n'
+        '\t\t\tif strings.Contains(contentType, "text/html") {',
+        '\t\t\tif strings.Contains(res.Request.URL.Path, "captchaNotRobot.check") {\n'
+        '\t\t\t\ttoken := extractSuccessToken(bodyBytes)\n'
+        '\t\t\t\tlog.Printf("[Captcha Proxy] CAPTCHA check response: %d bytes; success token present: %t", len(bodyBytes), token != "")\n'
+        '\t\t\t\tnotifyKey(keyCh, token)\n'
+        '\t\t\t}\n'
+        '\n'
+        '\t\t\tif strings.Contains(contentType, "text/html") {\n'
+        '\t\t\t\thtml := strings.ToLower(string(bodyBytes))\n'
+        '\t\t\t\tlog.Printf("[Captcha Proxy] HTML diagnostics: %d bytes; scripts=%d (external=%d); images=%d; forms=%d; iframes=%d; has not_robot marker=%t",\n'
+        '\t\t\t\t\tlen(bodyBytes), strings.Count(html, "<script"), strings.Count(html, "<script src"),\n'
+        '\t\t\t\t\tstrings.Count(html, "<img"), strings.Count(html, "<form"), strings.Count(html, "<iframe"), strings.Contains(html, "not_robot"))',
+        "log safe CAPTCHA HTML structure metrics",
+    )
+
+    path.write_text(source, encoding="utf-8")
+
 def patch_vk_captcha(client: Path) -> None:
     path = client / "main.go"
     source = path.read_text(encoding="utf-8")
@@ -395,6 +440,7 @@ def main() -> None:
     patch_main(client)
     patch_streams_per_credential(client)
     patch_manual_captcha(client)
+    patch_captcha_diagnostics(client)
     patch_vk_captcha(client)
 
     templates = Path(__file__).resolve().parent
