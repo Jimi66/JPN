@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Build
+import android.content.pm.PackageManager
 import android.text.InputType
 import android.view.View
 import android.widget.Button
@@ -15,6 +17,9 @@ import android.widget.TextView
 import android.widget.Toast
 
 class TurnSettingsActivity : Activity() {
+
+    private val notificationPermissionRequestCode = 4103
+    private var saveAfterPermissionResult = false
 
     private lateinit var enabledSwitch: Switch
     private lateinit var peerInput: EditText
@@ -177,6 +182,28 @@ class TurnSettingsActivity : Activity() {
             return
         }
 
+        if (enabled && Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            saveAfterPermissionResult = true
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                notificationPermissionRequestCode
+            )
+            return
+        }
+
+        persistSettings(enabled, peer, vkLink, port, threads, streams)
+    }
+
+    private fun persistSettings(
+        enabled: Boolean,
+        peer: String,
+        vkLink: String,
+        port: Int,
+        threads: Int,
+        streams: Int
+    ) {
         getSharedPreferences("jpn_settings", MODE_PRIVATE).edit()
             .putBoolean(KEY_ENABLED, enabled)
             .putString(KEY_PEER, peer)
@@ -186,9 +213,33 @@ class TurnSettingsActivity : Activity() {
             .putString(KEY_STREAMS_PER_CRED, streams.toString())
             .apply()
 
-        Toast.makeText(this, "Настройки TURN сохранены", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            this,
+            if (enabled && Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) "Настройки сохранены. Без разрешения Android уведомление CAPTCHA не появится"
+            else "Настройки TURN сохранены",
+            Toast.LENGTH_LONG
+        ).show()
         setResult(RESULT_OK)
         finish()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != notificationPermissionRequestCode || !saveAfterPermissionResult) return
+        saveAfterPermissionResult = false
+
+        val peer = peerInput.text.toString().trim()
+        val vkLink = vkLinkInput.text.toString().trim()
+        val port = portInput.text.toString().trim().toIntOrNull() ?: return
+        val threads = threadsInput.text.toString().trim().toIntOrNull() ?: return
+        val streams = streamsInput.text.toString().trim().toIntOrNull() ?: return
+        persistSettings(enabledSwitch.isChecked, peer, vkLink, port, threads, streams)
     }
 
     private fun dp(value: Int): Int =

@@ -39,6 +39,8 @@ class XrayVpnService : VpnService() {
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
+        private const val CAPTCHA_CHANNEL_ID = "jpn_turn_captcha"
+        private const val CAPTCHA_NOTIFICATION_ID = 4103
 
         fun start(context: Context, xrayJson: String, testMode: Boolean = false) {
             val intent = Intent(context, XrayVpnService::class.java).apply {
@@ -432,18 +434,49 @@ class XrayVpnService : VpnService() {
             TurnDiagnostics.record(this, "Отклонён небезопасный URL CAPTCHA")
             return
         }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            TurnDiagnostics.record(this, "Уведомление CAPTCHA не отправлено: нет разрешения POST_NOTIFICATIONS")
+            return
+        }
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        if (!notificationManager.areNotificationsEnabled()) {
+            TurnDiagnostics.record(this, "Уведомление CAPTCHA не отправлено: уведомления JPN отключены в Android")
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notificationManager.createNotificationChannel(
+                NotificationChannel(
+                    CAPTCHA_CHANNEL_ID,
+                    "JPN — CAPTCHA",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Запросы на подтверждение CAPTCHA VK для TURN-подключения"
+                    setShowBadge(true)
+                }
+            )
+            val channel = notificationManager.getNotificationChannel(CAPTCHA_CHANNEL_ID)
+            if (channel == null || channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                TurnDiagnostics.record(this, "Уведомление CAPTCHA не отправлено: канал JPN — CAPTCHA отключён")
+                return
+            }
+        }
+
         val intent = Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
             putExtra(EXTRA_CAPTCHA_URL, url)
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
-            4102,
+            CAPTCHA_NOTIFICATION_ID,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+            Notification.Builder(this, CAPTCHA_CHANNEL_ID)
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
@@ -452,10 +485,17 @@ class XrayVpnService : VpnService() {
             .setContentTitle("JPN — требуется проверка VK")
             .setContentText("Нажмите, чтобы открыть CAPTCHA")
             .setContentIntent(pendingIntent)
+            .setAutoCancel(false)
             .setOngoing(true)
             .addAction(0, "Открыть CAPTCHA", pendingIntent)
             .build()
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+
+        try {
+            notificationManager.notify(CAPTCHA_NOTIFICATION_ID, notification)
+            TurnDiagnostics.record(this, "Уведомление CAPTCHA успешно отправлено в отдельный канал JPN — CAPTCHA")
+        } catch (error: SecurityException) {
+            TurnDiagnostics.record(this, "Android отклонил уведомление CAPTCHA: ${error.message ?: "SecurityException"}")
+        }
     }
 
     private fun publishState(state: String, message: String, isTestMode: Boolean = testMode) {
