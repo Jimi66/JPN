@@ -18,7 +18,19 @@
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode" />
         <activity
+            android:name=".AutoUpdateMenuActivity"
+            android:exported="false" />
+        <activity
+            android:name=".AppRoutingActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SiteRoutingActivity"
+            android:exported="false" />
+        <activity
             android:name=".SettingsMenuActivity"
+            android:exported="false" />
+        <activity
+            android:name=".GeoDatabaseAutoUpdateActivity"
             android:exported="false" />
         <activity
             android:name=".SubscriptionAutoUpdateActivity"

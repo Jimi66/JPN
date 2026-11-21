@@ -1,8 +1,8 @@
 package com.jpn.app
 
 import android.content.Context
-import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import libXray.LibXray
@@ -13,10 +13,20 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    companion object {
+        private const val TAG = "JPN-AutoSubscription"
+    }
     override suspend fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean(SubscriptionAutoUpdateActivity.KEY_ENABLED, false)) return Result.success()
-        val address = prefs.getString("subscription_url", null)?.takeIf { it.isNotBlank() } ?: return Result.failure()
+        if (!prefs.getBoolean(SubscriptionAutoUpdateActivity.KEY_ENABLED, true)) {
+            Log.i(TAG, "Automatic subscription update is disabled")
+            return Result.success()
+        }
+        val address = prefs.getString("subscription_url", null)?.takeIf { it.isNotBlank() }
+            ?: run {
+                Log.w(TAG, "Automatic subscription update skipped: subscription URL is missing")
+                return Result.failure()
+            }
         return try {
             val connection = URL(address).openConnection() as HttpURLConnection
             val body: String
@@ -67,9 +77,14 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                 .putString("subscription_traffic", traffic)
                 .putString("subscription_meta_json", metadata?.toString())
                 .putString("saved_nodes_json", JSONArray(nodes).toString())
+                .putLong(SubscriptionAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
                 .apply()
             Result.success()
-        } catch (_: Exception) { Result.retry() }
+        } catch (error: Exception) {
+            // Do not log the subscription URL or response body: they may contain credentials.
+            Log.e(TAG, "Automatic subscription update failed: ${error.javaClass.simpleName}: ${error.message}", error)
+            Result.retry()
+        }
     }
 
 

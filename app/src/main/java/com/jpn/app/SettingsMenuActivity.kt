@@ -86,12 +86,20 @@ class SettingsMenuActivity : Activity() {
         }
         content.addView(generalItems, sectionParams())
 
-        content.addView(sectionTitle("Дополнительные настройки", textColor).apply {
+        content.addView(sectionTitle("Настройки Tun режима", textColor).apply {
             setPadding(0, dp(18), 0, dp(10))
         })
         val tunItems = sectionCard(cardColor, borderColor)
-        addSubItem(tunItems, "Автообновление подписки", textColor, secondaryColor) {
-            startActivity(Intent(this, SubscriptionAutoUpdateActivity::class.java))
+        addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
+            startActivity(Intent(this, AppRoutingActivity::class.java))
+        }
+        addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Маршрутизация сайтов", textColor, secondaryColor) {
+            startActivity(Intent(this, SiteRoutingActivity::class.java))
+        }
+        addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "Автообновление", textColor, secondaryColor) {
+            startActivity(Intent(this, AutoUpdateMenuActivity::class.java))
         }
         content.addView(tunItems, sectionParams())
 
@@ -137,7 +145,15 @@ class SettingsMenuActivity : Activity() {
         releaseEasterEggPlayer()
         videoPrepared = false
         videoCompleted = false
-        val container = FrameLayout(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        val videoWidth = ((content.width - content.paddingLeft - content.paddingRight) * 0.74f).toInt()
+        val container = FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF000000.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+            clipToOutline = true
+            alpha = 0f
+        }
         val texture = AspectRatioTextureView(this)
         container.addView(texture, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER
@@ -145,8 +161,11 @@ class SettingsMenuActivity : Activity() {
         easterEggContainer = container
         easterEggTexture = texture
         content.addView(container, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(200)
-        ).apply { topMargin = dp(12) })
+            videoWidth, dp(180)
+        ).apply {
+            topMargin = dp(12)
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
         container.post { (content.parent as? ScrollView)?.smoothScrollTo(0, content.height) }
 
         texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -158,22 +177,31 @@ class SettingsMenuActivity : Activity() {
                     player.setDataSource(this@SettingsMenuActivity,
                         Uri.parse("android.resource://$packageName/${R.raw.easter_egg}"))
                     player.setSurface(Surface(surfaceTexture))
-                    player.setOnVideoSizeChangedListener { _, videoWidth, videoHeight ->
-                        texture.setVideoSize(videoWidth, videoHeight)
+                    player.setOnVideoSizeChangedListener { _, sourceWidth, sourceHeight ->
+                        texture.setVideoSize(sourceWidth, sourceHeight)
+                        if (sourceWidth > 0 && sourceHeight > 0) {
+                            container.layoutParams = container.layoutParams.apply {
+                                this.height = (videoWidth * sourceHeight.toFloat() / sourceWidth).toInt()
+                            }
+                        }
                     }
                     player.setOnPreparedListener { mp ->
                         videoPrepared = true
                         mp.isLooping = false
+                        container.animate()
+                            .alpha(1f)
+                            .setDuration(350L)
+                            .start()
                         mp.start()
                     }
                     player.setOnCompletionListener {
                         videoCompleted = true
                         videoPrepared = false
-                        container.visibility = View.GONE
+                        hideEasterEggContainer(container)
                         releaseEasterEggPlayer()
                     }
                     player.setOnErrorListener { _, _, _ ->
-                        container.visibility = View.GONE
+                        hideEasterEggContainer(container)
                         videoCompleted = true
                         videoPrepared = false
                         releaseEasterEggPlayer()
@@ -184,7 +212,7 @@ class SettingsMenuActivity : Activity() {
                     }
                     player.prepareAsync()
                 } catch (_: Exception) {
-                    container.visibility = View.GONE
+                    hideEasterEggContainer(container)
                     releaseEasterEggPlayer()
                     android.widget.Toast.makeText(this@SettingsMenuActivity,
                         "Не удалось воспроизвести видео пасхалки",
@@ -196,6 +224,16 @@ class SettingsMenuActivity : Activity() {
             override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean = true
             override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
         }
+    }
+
+    private fun hideEasterEggContainer(container: FrameLayout) {
+        container.animate()
+            .alpha(0f)
+            .setDuration(250L)
+            .withEndAction {
+                container.visibility = View.GONE
+            }
+            .start()
     }
 
     private fun releaseEasterEggPlayer() {

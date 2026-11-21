@@ -149,7 +149,32 @@ class XrayVpnService : VpnService() {
             .addRoute("::", 0)
 
         // Diagnostic ping mode is intentionally limited to JPN itself.
-        if (testMode) builder.addAllowedApplication(packageName)
+        // Normal VPN sessions may use Android-level per-app tunneling.
+        if (testMode) {
+            builder.addAllowedApplication(packageName)
+        } else {
+            val prefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+            if (prefs.getBoolean("routing_enabled", false)) {
+                val mode = prefs.getString("routing_mode", "selected") ?: "selected"
+                val selectedPackages = prefs.getStringSet("routing_packages", emptySet())
+                    ?.toSet()
+                    .orEmpty()
+                    .filter { app ->
+                        app != packageName &&
+                            runCatching { packageManager.getApplicationInfo(app, 0) }.isSuccess
+                    }
+                when (mode) {
+                    "selected" -> {
+                        // Empty or stale allow-list must never accidentally become full-tunnel.
+                        val allowed = selectedPackages.ifEmpty { listOf(packageName) }
+                        allowed.forEach { app -> builder.addAllowedApplication(app) }
+                    }
+                    "exclude" -> selectedPackages.forEach { app ->
+                        builder.addDisallowedApplication(app)
+                    }
+                }
+            }
+        }
 
         vpnInterface = builder.establish()
             ?: throw IllegalStateException("Android did not establish the VPN interface")

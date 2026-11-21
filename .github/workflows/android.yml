@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [ "main", "mvp-vless-direct", "easter-egg-inline-video-20261118" ]
+    branches: [ "main", "mvp-vless-direct", "easter-egg-inline-video-20261118", "jpn-1.1.1-app-routing" ]
   workflow_dispatch:
 
 permissions:

@@ -60,12 +60,48 @@ internal object GeoDatabaseInstaller {
                 }
             }
             val success = errors.isEmpty() && areDatabasesValid(appContext)
+            if (success && items.isNotEmpty()) {
+                prefs.edit()
+                    .putLong(GeoDatabaseAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
+                    .apply()
+            }
             val details = if (success) "Базы GeoSite и GeoIP успешно загружены"
                 else errors.joinToString("\n").ifBlank { "Не удалось проверить загруженные базы" }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 onComplete(success, details)
             }
         }.start()
+    }
+
+    /** Downloads and atomically installs fresh copies of both Geo databases. */
+    fun updateDatabases(context: Context) {
+        val appContext = context.applicationContext
+        val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val items = listOf(
+            Triple("site_geosite_url", "geosite.dat", "GeoSite"),
+            Triple("site_geoip_url", "geoip.dat", "GeoIP")
+        )
+        val errors = mutableListOf<String>()
+
+        items.forEach { (urlKey, fileName, label) ->
+            val address = prefs.getString(urlKey, null)?.takeIf { it.isNotBlank() }
+                ?: GEO_DEFAULT + fileName
+            try {
+                download(appContext.filesDir, address, fileName) { }
+            } catch (error: Exception) {
+                errors.add("$label: ${error.message ?: "ошибка загрузки"}")
+            }
+        }
+
+        if (errors.isNotEmpty()) {
+            throw IllegalStateException(errors.joinToString("; "))
+        }
+        if (!areDatabasesValid(appContext)) {
+            throw IllegalStateException("Не удалось проверить обновлённые Geo-базы")
+        }
+        prefs.edit()
+            .putLong(GeoDatabaseAutoUpdateActivity.KEY_LAST_UPDATE, System.currentTimeMillis())
+            .apply()
     }
 
     private fun download(
