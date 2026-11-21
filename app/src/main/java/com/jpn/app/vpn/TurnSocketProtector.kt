@@ -5,6 +5,7 @@ import android.net.LocalSocket
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import android.util.Log
 import android.system.Os
 import java.io.Closeable
 import java.io.IOException
@@ -44,7 +45,10 @@ internal class TurnSocketProtector(
                 val client = try {
                     localServer.accept()
                 } catch (error: IOException) {
-                    if (!closed.get()) throw error
+                    if (!closed.get()) {
+                        Log.e("JPN-TURN", "Socket-protection listener stopped unexpectedly", error)
+                        close()
+                    }
                     break
                 }
 
