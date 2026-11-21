@@ -239,7 +239,12 @@ class XrayVpnService : VpnService() {
             throw IllegalStateException(response.optString("error", "Xray failed to start"))
         }
         coreStarted = true
-        publishState("connected", if (testMode) "Тестовый туннель подключён" else "VPN подключён", testMode)
+        val statusMessage = when {
+            testMode -> "Тестовый туннель подключён"
+            turnConfig != null -> "TURN-клиент запущен, ожидаю соединение"
+            else -> "VPN подключён"
+        }
+        publishState(if (turnConfig != null && !testMode) "connecting" else "connected", statusMessage, testMode)
     }
 
     private fun startTurnClient(turnConfig: JSONObject) {
@@ -247,6 +252,7 @@ class XrayVpnService : VpnService() {
         val vkLink = turnConfig.optString("vkLink").trim()
         val listen = turnConfig.optString("listen", "127.0.0.1:9000").trim()
         val threads = turnConfig.optInt("threads", 12).coerceIn(1, 64)
+        val streamsPerCredential = turnConfig.optInt("streamsPerCredential", 12).coerceIn(1, 64)
         if (peer.isBlank() || vkLink.isBlank()) {
             throw IllegalStateException("Не заполнены адрес TURN-сервера и ссылка VK Calls")
         }
@@ -264,6 +270,7 @@ class XrayVpnService : VpnService() {
             "-vk-link", vkLink,
             "-listen", listen,
             "-n", threads.toString(),
+            "-streams-per-cred", streamsPerCredential.toString(),
             "-udp",
             "--manual-captcha"
         )
@@ -279,7 +286,26 @@ class XrayVpnService : VpnService() {
         Thread({
             runCatching {
                 child.inputStream.bufferedReader().useLines { output ->
-                    output.forEach { line -> Log.i("JPN-TURN", line) }
+                    output.forEach { line ->
+                        Log.i("JPN-TURN", line)
+                        when {
+                            line.contains("Established DTLS connection", ignoreCase = true) -> {
+                                workerHandler.post {
+                                    if (turnProcess === child && coreStarted) {
+                                        publishState("connected", "VPN подключён через TURN", testMode)
+                                    }
+                                }
+                            }
+                            line.contains("manually open this URL:", ignoreCase = true) ||
+                                line.contains("Open this URL in your browser:", ignoreCase = true) -> {
+                                workerHandler.post {
+                                    if (turnProcess === child && coreStarted) {
+                                        publishState("connecting", "TURN ожидает подтверждения VK Calls", testMode)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }.onFailure { error ->
                 Log.w("JPN-TURN", "Could not read TURN core output", error)
