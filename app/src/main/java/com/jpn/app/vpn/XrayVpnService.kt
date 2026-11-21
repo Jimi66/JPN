@@ -36,6 +36,7 @@ class XrayVpnService : VpnService() {
         const val EXTRA_TEST_MODE = "test_mode"
         const val ACTION_STATE_CHANGED = "com.jpn.app.vpn.STATE_CHANGED"
         const val EXTRA_CAPTCHA_URL = "captcha_url"
+        const val ACTION_CAPTCHA_OPENED = "com.jpn.app.vpn.CAPTCHA_OPENED"
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
@@ -51,6 +52,10 @@ class XrayVpnService : VpnService() {
             } else {
                 context.startService(intent)
             }
+        }
+
+        fun captchaOpened(context: Context) {
+            runCatching { context.startService(Intent(context, XrayVpnService::class.java).apply { action = ACTION_CAPTCHA_OPENED }) }
         }
 
         fun stop(context: Context, testMode: Boolean = false) {
@@ -88,6 +93,10 @@ class XrayVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStartId = startId
         when (intent?.action) {
+            ACTION_CAPTCHA_OPENED -> {
+                updateVpnNotification("VPN-подключение активно")
+                return START_NOT_STICKY
+            }
             ACTION_STOP -> {
                 val requestedTestMode = intent.getBooleanExtra(EXTRA_TEST_MODE, false)
                 workerHandler.post {
@@ -318,6 +327,7 @@ class XrayVpnService : VpnService() {
                             line.contains("Established DTLS connection", ignoreCase = true) -> {
                                 workerHandler.post {
                                     if (turnProcess === child && coreStarted) {
+                                        updateVpnNotification("VPN-подключение активно")
                                         publishState("connected", "VPN подключён через TURN", testMode)
                                     }
                                 }
@@ -378,11 +388,6 @@ class XrayVpnService : VpnService() {
     }
 
     private fun stopCoreAndTunnel() {
-        runCatching {
-            stopService(Intent(this, com.jpn.app.TurnCaptchaOverlayService::class.java).apply {
-                action = com.jpn.app.TurnCaptchaOverlayService.ACTION_STOP
-            })
-        }
         if (coreStarted) {
             runCatching {
                 LibXray.invoke(
@@ -442,21 +447,25 @@ class XrayVpnService : VpnService() {
             TurnDiagnostics.record(this, "Отклонён небезопасный URL CAPTCHA VK ID")
             return false
         }
-        if (!android.provider.Settings.canDrawOverlays(this)) {
-            TurnDiagnostics.record(this, "CAPTCHA ожидает: не выдано разрешение «Поверх других приложений»")
-            return false
-        }
 
         return runCatching {
-            val intent = Intent(this, com.jpn.app.TurnCaptchaOverlayService::class.java).apply {
-                action = com.jpn.app.TurnCaptchaOverlayService.ACTION_SHOW
-                putExtra(EXTRA_CAPTCHA_URL, url)
+            if (com.jpn.app.MainActivity.isVisible) {
+                startActivity(Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(EXTRA_CAPTCHA_URL, url)
+                })
+                TurnDiagnostics.record(this, "Встроенный экран VK CAPTCHA открыт в JPN")
+            } else {
+                getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(com.jpn.app.MainActivity.KEY_PENDING_TURN_CAPTCHA, url)
+                    .apply()
+                updateVpnNotification("Открой JPN для подтверждения CAPTCHA VK")
+                TurnDiagnostics.record(this, "CAPTCHA ожидает: открой JPN; URL сохранён до возвращения пользователя")
             }
-            startService(intent)
-            TurnDiagnostics.record(this, "Запрошено плавающее окно CAPTCHA")
             true
         }.onFailure { error ->
-            TurnDiagnostics.record(this, "Не удалось запустить окно CAPTCHA: ${error.message ?: "ошибка Android"}")
+            TurnDiagnostics.record(this, "Не удалось открыть экран CAPTCHA: ${error.message ?: "ошибка Android"}")
         }.getOrDefault(false)
     }
 
@@ -495,7 +504,24 @@ class XrayVpnService : VpnService() {
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun updateVpnNotification(message: String) {
+        runCatching {
+            getSystemService(NotificationManager::class.java)
+                .notify(NOTIFICATION_ID, buildNotification(message))
+        }
+    }
+
+    private fun buildNotification(message: String = "VPN-подключение активно"): Notification {
+        val openAppIntent = Intent(this, com.jpn.app.MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            4104,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -505,8 +531,10 @@ class XrayVpnService : VpnService() {
         return builder
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("JPN")
-            .setContentText("VPN-подключение активно")
+            .setContentText(message)
+            .setContentIntent(contentIntent)
             .setOngoing(true)
             .build()
     }
+
 }

@@ -143,16 +143,6 @@ class TurnCaptchaActivity : Activity() {
         ))
         setContentView(root)
         JpnTheme.apply(this, root)
-        // Compact, dimmed browser panel within the JPN task.
-        window.setBackgroundDrawableResource(android.R.color.transparent)
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        window.attributes = window.attributes.apply { dimAmount = 0.58f }
-        val panelWidth = (resources.displayMetrics.widthPixels - dp(32)).coerceAtLeast(dp(280))
-            .coerceAtMost(dp(520))
-        val panelHeight = (resources.displayMetrics.heightPixels - dp(96)).coerceAtLeast(dp(360))
-            .coerceAtMost(dp(760))
-        window.setLayout(panelWidth, panelHeight)
-
         if (canProxy) {
             val config = ProxyConfig.Builder()
                 .addProxyRule("127.0.0.1:$proxyPort")

@@ -2,7 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -34,10 +33,6 @@
             android:exported="false" />
         <activity
             android:name=".TurnCaptchaActivity"
-            android:exported="false"
-            android:process=":captcha" />
-        <service
-            android:name=".TurnCaptchaOverlayService"
             android:exported="false"
             android:process=":captcha" />
         <activity

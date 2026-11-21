@@ -90,6 +90,9 @@ class MainActivity : Activity() {
         private const val VPN_REQUEST_CODE = 4102
         const val ACTION_QUICK_SETTINGS_TOGGLE = "com.jpn.app.action.QUICK_SETTINGS_TOGGLE"
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
+        const val KEY_PENDING_TURN_CAPTCHA = "turn_pending_captcha_url"
+        @Volatile var isVisible: Boolean = false
+            private set
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -287,12 +290,28 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        isVisible = true
         val currentDarkTheme = JpnTheme.isDark(this)
         if (currentDarkTheme != appliedDarkTheme) {
             recreate()
             return
         }
+        openPendingTurnCaptcha()
         applyPendingSiteRoutingRestart()
+    }
+
+    override fun onPause() {
+        isVisible = false
+        super.onPause()
+    }
+
+    private fun openPendingTurnCaptcha() {
+        val url = preferences.getString(KEY_PENDING_TURN_CAPTCHA, null) ?: return
+        preferences.edit().remove(KEY_PENDING_TURN_CAPTCHA).apply()
+        startActivity(Intent(this, TurnCaptchaActivity::class.java).apply {
+            putExtra(XrayVpnService.EXTRA_CAPTCHA_URL, url)
+        })
+        XrayVpnService.captchaOpened(this)
     }
 
     private fun applyPendingSiteRoutingRestart() {
