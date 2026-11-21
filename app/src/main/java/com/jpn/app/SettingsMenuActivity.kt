@@ -98,6 +98,10 @@ class SettingsMenuActivity : Activity() {
             startActivity(Intent(this, SiteRoutingActivity::class.java))
         }
         addDivider(tunItems, borderColor)
+        addSubItem(tunItems, "TURN-клиент", textColor, secondaryColor) {
+            startActivity(Intent(this, TurnSettingsActivity::class.java))
+        }
+        addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Автообновление", textColor, secondaryColor) {
             startActivity(Intent(this, AutoUpdateMenuActivity::class.java))
         }
