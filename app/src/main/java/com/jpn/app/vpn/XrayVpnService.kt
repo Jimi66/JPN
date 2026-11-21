@@ -39,8 +39,6 @@ class XrayVpnService : VpnService() {
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
-        private const val CAPTCHA_CHANNEL_ID = "jpn_turn_captcha"
-        private const val CAPTCHA_NOTIFICATION_ID = 4103
 
         fun start(context: Context, xrayJson: String, testMode: Boolean = false) {
             val intent = Intent(context, XrayVpnService::class.java).apply {
@@ -309,10 +307,10 @@ class XrayVpnService : VpnService() {
                                 val captchaUrl = line.substringAfter("JPN_CAPTCHA_URL=").trim()
                                 workerHandler.post {
                                     if (turnProcess === child && coreStarted) {
-                                        val notificationSent = showTurnCaptchaNotification(captchaUrl)
+                                        val opened = showTurnCaptcha(captchaUrl)
                                         publishState("connecting", "Ожидается подтверждение CAPTCHA VK", testMode)
-                                        if (notificationSent) {
-                                            TurnDiagnostics.record(this@XrayVpnService, "Уведомление CAPTCHA отправлено; ожидается нажатие пользователем")
+                                        if (opened) {
+                                            TurnDiagnostics.record(this@XrayVpnService, "Окно CAPTCHA открыто поверх JPN")
                                         }
                                     }
                                 }
@@ -430,78 +428,34 @@ class XrayVpnService : VpnService() {
     }
 
 
-    private fun showTurnCaptchaNotification(url: String): Boolean {
+    private fun showTurnCaptcha(url: String): Boolean {
         val uri = android.net.Uri.parse(url)
         val host = uri.host.orEmpty().lowercase()
-        val isVkHost = host == "id.vk.ru" || host == "id.vk.com" || host.endsWith(".vk.ru") || host.endsWith(".vk.com")
+        val isVkHost = host == "id.vk.ru" || host == "id.vk.com" ||
+            host.endsWith(".vk.ru") || host.endsWith(".vk.com")
         if (uri.scheme != "https" || !isVkHost || uri.userInfo != null) {
             TurnDiagnostics.record(this, "Отклонён небезопасный URL CAPTCHA VK ID")
             return false
         }
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            TurnDiagnostics.record(this, "Уведомление CAPTCHA не отправлено: нет разрешения POST_NOTIFICATIONS")
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            TurnDiagnostics.record(this, "CAPTCHA ожидает: не выдано разрешение «Поверх других приложений»")
             return false
         }
 
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        if (!notificationManager.areNotificationsEnabled()) {
-            TurnDiagnostics.record(this, "Уведомление CAPTCHA не отправлено: уведомления JPN отключены в Android")
-            return false
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager.createNotificationChannel(
-                NotificationChannel(
-                    CAPTCHA_CHANNEL_ID,
-                    "JPN — CAPTCHA",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Запросы на подтверждение CAPTCHA VK для TURN-подключения"
-                    setShowBadge(true)
-                }
-            )
-            val channel = notificationManager.getNotificationChannel(CAPTCHA_CHANNEL_ID)
-            if (channel == null || channel.importance == NotificationManager.IMPORTANCE_NONE) {
-                TurnDiagnostics.record(this, "Уведомление CAPTCHA не отправлено: канал JPN — CAPTCHA отключён")
-                return false
+        return runCatching {
+            val intent = Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
+                putExtra(EXTRA_CAPTCHA_URL, url)
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
             }
-        }
-
-        val intent = Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
-            putExtra(EXTRA_CAPTCHA_URL, url)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            CAPTCHA_NOTIFICATION_ID,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CAPTCHA_CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        })
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setContentTitle("JPN — требуется проверка VK")
-            .setContentText("Нажмите, чтобы открыть CAPTCHA")
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(false)
-            .setOngoing(true)
-            .addAction(0, "Открыть CAPTCHA", pendingIntent)
-            .build()
-
-        try {
-            notificationManager.notify(CAPTCHA_NOTIFICATION_ID, notification)
-            TurnDiagnostics.record(this, "Уведомление CAPTCHA успешно отправлено в отдельный канал JPN — CAPTCHA")
-            return true
-        } catch (error: SecurityException) {
-            TurnDiagnostics.record(this, "Android отклонил уведомление CAPTCHA: ${error.message ?: "SecurityException"}")
-            return false
-        }
+            startActivity(intent)
+            true
+        }.onFailure { error ->
+            TurnDiagnostics.record(this, "Не удалось открыть окно CAPTCHA: ${error.message ?: "ошибка Android"}")
+        }.getOrDefault(false)
     }
 
     private fun publishState(state: String, message: String, isTestMode: Boolean = testMode) {

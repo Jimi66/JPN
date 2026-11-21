@@ -4,8 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
-import android.os.Build
-import android.content.pm.PackageManager
+import android.provider.Settings
+import android.net.Uri
 import android.text.InputType
 import android.view.View
 import android.widget.Button
@@ -18,8 +18,7 @@ import android.widget.Toast
 
 class TurnSettingsActivity : Activity() {
 
-    private val notificationPermissionRequestCode = 4103
-    private var saveAfterPermissionResult = false
+    private var waitingForOverlayPermission = false
 
     private lateinit var enabledSwitch: Switch
     private lateinit var peerInput: EditText
@@ -67,7 +66,7 @@ class TurnSettingsActivity : Activity() {
         root.addView(enabledSwitch)
 
         root.addView(TextView(this).apply {
-            text = "TURN-клиент будет принимать WireGuard UDP-трафик локально и передавать его через VK Calls на твой TURN-сервер. Остальные типы серверов JPN не затрагиваются."
+            text = "TURN-клиент будет принимать WireGuard UDP-трафик локально и передавать его через VK Calls на твой TURN-сервер. При запросе CAPTCHA JPN откроет компактное окно браузера поверх приложения. Остальные типы серверов JPN не затрагиваются."
             textSize = 13f
             setPadding(0, dp(2), 0, dp(14))
         })
@@ -93,7 +92,7 @@ class TurnSettingsActivity : Activity() {
             InputType.TYPE_CLASS_NUMBER)
 
         root.addView(TextView(this).apply {
-            text = "На первом этапе реализован UDP-режим. Для подключения выбери в JPN WireGuard-профиль. Локальный адрес будет 127.0.0.1, порт задаётся выше. При запросе VK CAPTCHA JPN покажет отдельное уведомление. Нажми его, чтобы открыть встроенный WebView."
+            text = "Для автоматического показа CAPTCHA, даже если JPN свёрнут, Android попросит разрешить JPN отображаться поверх других приложений. Разрешение используется только для показа окна проверки VK. Сам браузер работает внутри JPN."
             textSize = 12f
             setPadding(0, dp(10), 0, dp(18))
         })
@@ -153,7 +152,7 @@ class TurnSettingsActivity : Activity() {
         }
     }
 
-    private fun saveSettings() {
+    private fun saveSettings(skipOverlayPrompt: Boolean = false) {
         val peer = peerInput.text.toString().trim()
         val vkLink = vkLinkInput.text.toString().trim()
         val port = portInput.text.toString().trim().toIntOrNull()
@@ -182,14 +181,14 @@ class TurnSettingsActivity : Activity() {
             return
         }
 
-        if (enabled && Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            saveAfterPermissionResult = true
-            requestPermissions(
-                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                notificationPermissionRequestCode
+        if (enabled && !skipOverlayPrompt && !Settings.canDrawOverlays(this)) {
+            waitingForOverlayPermission = true
+            Toast.makeText(this, "Разреши JPN отображаться поверх других приложений, чтобы CAPTCHA открывалась автоматически", Toast.LENGTH_LONG).show()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
             )
+            startActivity(intent)
             return
         }
 
@@ -213,33 +212,19 @@ class TurnSettingsActivity : Activity() {
             .putString(KEY_STREAMS_PER_CRED, streams.toString())
             .apply()
 
-        Toast.makeText(
-            this,
-            if (enabled && Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) "Настройки сохранены. Без разрешения Android уведомление CAPTCHA не появится"
-            else "Настройки TURN сохранены",
-            Toast.LENGTH_LONG
-        ).show()
+        Toast.makeText(this, "Настройки TURN сохранены", Toast.LENGTH_LONG).show()
         setResult(RESULT_OK)
         finish()
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != notificationPermissionRequestCode || !saveAfterPermissionResult) return
-        saveAfterPermissionResult = false
-
-        val peer = peerInput.text.toString().trim()
-        val vkLink = vkLinkInput.text.toString().trim()
-        val port = portInput.text.toString().trim().toIntOrNull() ?: return
-        val threads = threadsInput.text.toString().trim().toIntOrNull() ?: return
-        val streams = streamsInput.text.toString().trim().toIntOrNull() ?: return
-        persistSettings(enabledSwitch.isChecked, peer, vkLink, port, threads, streams)
+    override fun onResume() {
+        super.onResume()
+        if (!waitingForOverlayPermission) return
+        waitingForOverlayPermission = false
+        saveSettings(skipOverlayPrompt = true)
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Настройки сохранены, но без этого разрешения Android может не показать CAPTCHA поверх других приложений", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun dp(value: Int): Int =
