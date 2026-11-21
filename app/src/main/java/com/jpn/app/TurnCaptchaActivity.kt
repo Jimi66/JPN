@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -18,6 +19,9 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
 import androidx.webkit.WebViewCompat
@@ -47,6 +51,9 @@ class TurnCaptchaActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         JpnTheme.applyBeforeCreate(this)
+        // Keep the CAPTCHA screen inside the usable display area on edge-to-edge devices.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         val captchaUrl = intent.getStringExtra(XrayVpnService.EXTRA_CAPTCHA_URL).orEmpty()
         val uri = runCatching { Uri.parse(captchaUrl) }.getOrNull()
@@ -68,6 +75,19 @@ class TurnCaptchaActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
+            clipToPadding = true
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(
+                dp(12) + safe.left,
+                dp(8) + safe.top,
+                dp(12) + safe.right,
+                dp(8) + safe.bottom
+            )
+            insets
         }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         header.addView(TextView(this).apply {
@@ -142,6 +162,7 @@ class TurnCaptchaActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
         setContentView(root)
+        ViewCompat.requestApplyInsets(root)
         JpnTheme.apply(this, root)
         if (canProxy) {
             val config = ProxyConfig.Builder()
