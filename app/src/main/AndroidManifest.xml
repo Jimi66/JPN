@@ -36,6 +36,10 @@
             android:name=".TurnCaptchaActivity"
             android:exported="false"
             android:process=":captcha" />
+        <service
+            android:name=".TurnCaptchaOverlayService"
+            android:exported="false"
+            android:process=":captcha" />
         <activity
             android:name=".SiteRoutingActivity"
             android:exported="false" />

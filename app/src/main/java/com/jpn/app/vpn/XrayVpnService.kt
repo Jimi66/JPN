@@ -378,6 +378,11 @@ class XrayVpnService : VpnService() {
     }
 
     private fun stopCoreAndTunnel() {
+        runCatching {
+            stopService(Intent(this, com.jpn.app.TurnCaptchaOverlayService::class.java).apply {
+                action = com.jpn.app.TurnCaptchaOverlayService.ACTION_STOP
+            })
+        }
         if (coreStarted) {
             runCatching {
                 LibXray.invoke(
@@ -443,18 +448,15 @@ class XrayVpnService : VpnService() {
         }
 
         return runCatching {
-            val intent = Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
+            val intent = Intent(this, com.jpn.app.TurnCaptchaOverlayService::class.java).apply {
+                action = com.jpn.app.TurnCaptchaOverlayService.ACTION_SHOW
                 putExtra(EXTRA_CAPTCHA_URL, url)
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
-                )
             }
-            startActivity(intent)
+            startService(intent)
+            TurnDiagnostics.record(this, "Запрошено плавающее окно CAPTCHA")
             true
         }.onFailure { error ->
-            TurnDiagnostics.record(this, "Не удалось открыть окно CAPTCHA: ${error.message ?: "ошибка Android"}")
+            TurnDiagnostics.record(this, "Не удалось запустить окно CAPTCHA: ${error.message ?: "ошибка Android"}")
         }.getOrDefault(false)
     }
 

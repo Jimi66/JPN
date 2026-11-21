@@ -323,47 +323,105 @@ def patch_manual_captcha(client: Path) -> None:
 
 
 
-
-def patch_android_captcha_url(client: Path) -> None:
+def patch_manual_captcha_wait(client: Path) -> None:
     path = client / "manual_captcha.go"
     source = path.read_text(encoding="utf-8")
+
     source = replace_once(
         source,
-        'func runCaptchaServerAndWait(handler http.Handler, captchaURL string, keyCh <-chan string, logPrefix string) (string, error) {',
         'func runCaptchaServerAndWait(handler http.Handler, captchaURL, androidURL string, keyCh <-chan string, logPrefix string) (string, error) {',
-        "add direct Android CAPTCHA URL",
+        'func runCaptchaServerAndWait(ctx context.Context, handler http.Handler, captchaURL, androidURL string, keyCh <-chan string, logPrefix string) (string, error) {',
+        "make manual CAPTCHA wait cancellable",
     )
     source = replace_once(
         source,
-        '\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\n'
-        '\tif runtime.GOOS != "android" {\n'
-        '\t\topenBrowser(captchaURL)\n'
-        '\t}',
-        '\tif runtime.GOOS == "android" && androidURL != "" {\n'
-        '\t\tfmt.Println("JPN_CAPTCHA_URL=" + androidURL)\n'
-        '\t} else {\n'
-        '\t\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\n'
+        '\tkey := <-keyCh\n'
+        '\n'
+        '\tctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)\n'
+        '\tdefer cancel()\n'
+        '\tif err := srv.Shutdown(ctx); err != nil {\n'
+        '\t\treturn "", err\n'
         '\t}\n'
-        '\tif runtime.GOOS != "android" {\n'
-        '\t\topenBrowser(captchaURL)\n'
-        '\t}',
-        "open original VK CAPTCHA in Android WebView",
+        '\n'
+        '\treturn key, nil',
+        '\tvar key string\n'
+        '\tselect {\n'
+        '\tcase key = <-keyCh:\n'
+        '\tcase <-ctx.Done():\n'
+        '\t}\n'
+        '\n'
+        '\tshutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)\n'
+        '\tdefer cancel()\n'
+        '\tif err := srv.Shutdown(shutdownCtx); err != nil {\n'
+        '\t\treturn "", err\n'
+        '\t}\n'
+        '\tif key == "" {\n'
+        '\t\treturn "", ctx.Err()\n'
+        '\t}\n'
+        '\treturn key, nil',
+        "wait for CAPTCHA token until VPN context is cancelled",
     )
     source = replace_once(
         source,
-        'return runCaptchaServerAndWait(mux, localCaptchaOrigin(), keyCh, "captcha HTTP server error")',
+        'func solveCaptchaViaHTTP(captchaImg string) (string, error) {',
+        'func solveCaptchaViaHTTP(ctx context.Context, captchaImg string) (string, error) {',
+        "pass context to image CAPTCHA server",
+    )
+    source = replace_once(
+        source,
         'return runCaptchaServerAndWait(mux, localCaptchaOrigin(), "", keyCh, "captcha HTTP server error")',
-        "update image CAPTCHA server call",
+        'return runCaptchaServerAndWait(ctx, mux, localCaptchaOrigin(), "", keyCh, "captcha HTTP server error")',
+        "make image CAPTCHA wait cancellable",
     )
     source = replace_once(
         source,
-        'return runCaptchaServerAndWait(mux, localCaptchaURLForTarget(targetURL), keyCh, "proxy HTTP server error")',
+        'func solveCaptchaViaProxy(redirectURI string, dialer *net.Dialer) (string, error) {',
+        'func solveCaptchaViaProxy(ctx context.Context, redirectURI string, dialer *net.Dialer) (string, error) {',
+        "pass context to VK CAPTCHA proxy",
+    )
+    source = replace_once(
+        source,
         'return runCaptchaServerAndWait(mux, localCaptchaURLForTarget(targetURL), redirectURI, keyCh, "proxy HTTP server error")',
-        "pass original VK redirect URI to Android",
+        'return runCaptchaServerAndWait(ctx, mux, localCaptchaURLForTarget(targetURL), redirectURI, keyCh, "proxy HTTP server error")',
+        "make VK CAPTCHA proxy wait cancellable",
     )
     path.write_text(source, encoding="utf-8")
 
-
+    main_path = client / "main.go"
+    main_source = main_path.read_text(encoding="utf-8")
+    main_source = replace_once(
+        main_source,
+        'manualCtx, manualCancel := context.WithTimeout(ctx, 60*time.Second)',
+        'manualCtx := ctx',
+        "remove fixed 60-second manual CAPTCHA timeout",
+    )
+    main_source = replace_once(
+        main_source,
+        't, e = solveCaptchaViaProxy(captchaErr.RedirectURI, dialer)',
+        't, e = solveCaptchaViaProxy(manualCtx, captchaErr.RedirectURI, dialer)',
+        "pass VPN context to VK CAPTCHA proxy",
+    )
+    main_source = replace_once(
+        main_source,
+        'k, e = solveCaptchaViaHTTP(captchaErr.CaptchaImg)',
+        'k, e = solveCaptchaViaHTTP(manualCtx, captchaErr.CaptchaImg)',
+        "pass VPN context to image CAPTCHA",
+    )
+    main_source = replace_once(
+        main_source,
+        'case <-manualCtx.Done():\n'
+        '\t\t\t\t\t\tsolveErr = fmt.Errorf("manual captcha timed out after 60s")',
+        'case <-manualCtx.Done():\n'
+        '\t\t\t\t\t\tsolveErr = fmt.Errorf("manual captcha cancelled: %w", manualCtx.Err())',
+        "report CAPTCHA cancellation instead of timeout",
+    )
+    main_source = replace_once(
+        main_source,
+        '\t\t\t\t\tmanualCancel()\n',
+        '',
+        "remove manual CAPTCHA timeout cancellation",
+    )
+    main_path.write_text(main_source, encoding="utf-8")
 
 def patch_captcha_diagnostics(client: Path) -> None:
     path = client / "manual_captcha.go"
@@ -483,6 +541,7 @@ def main() -> None:
     patch_streams_per_credential(client)
     patch_manual_captcha(client)
     patch_android_captcha_url(client)
+    patch_manual_captcha_wait(client)
     patch_captcha_diagnostics(client)
     patch_vk_captcha(client)
 
