@@ -432,8 +432,10 @@ class XrayVpnService : VpnService() {
 
     private fun showTurnCaptchaNotification(url: String): Boolean {
         val uri = android.net.Uri.parse(url)
-        if (uri.scheme != "http" || uri.host !in setOf("localhost", "127.0.0.1", "::1") || uri.port != 8765) {
-            TurnDiagnostics.record(this, "Отклонён небезопасный URL CAPTCHA")
+        val host = uri.host.orEmpty().lowercase()
+        val isVkHost = host == "id.vk.ru" || host == "id.vk.com" || host.endsWith(".vk.ru") || host.endsWith(".vk.com")
+        if (uri.scheme != "https" || !isVkHost || uri.userInfo != null) {
+            TurnDiagnostics.record(this, "Отклонён небезопасный URL CAPTCHA VK ID")
             return false
         }
         if (Build.VERSION.SDK_INT >= 33 &&

@@ -323,6 +323,38 @@ def patch_manual_captcha(client: Path) -> None:
 
 
 
+
+def patch_android_captcha_url(client: Path) -> None:
+    path = client / "manual_captcha.go"
+    source = path.read_text(encoding="utf-8")
+    source = replace_once(
+        source,
+        'func runCaptchaServerAndWait(handler http.Handler, captchaURL string, keyCh <-chan string, logPrefix string) (string, error) {',
+        'func runCaptchaServerAndWait(handler http.Handler, captchaURL, androidURL string, keyCh <-chan string, logPrefix string) (string, error) {',
+        "add direct Android CAPTCHA URL",
+    )
+    source = replace_once(
+        source,
+        '\\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\\n\\tif runtime.GOOS != "android" {\\n\\t\\topenBrowser(captchaURL)\\n\\t}',
+        '\\tif runtime.GOOS == "android" && androidURL != "" {\\n\\t\\tfmt.Println("JPN_CAPTCHA_URL=" + androidURL)\\n\\t} else {\\n\\t\\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\\n\\t}\\n\\tif runtime.GOOS != "android" {\\n\\t\\topenBrowser(captchaURL)\\n\\t}',
+        "open original VK CAPTCHA in Android WebView",
+    )
+    source = replace_once(
+        source,
+        'return runCaptchaServerAndWait(mux, localCaptchaOrigin(), keyCh, "captcha HTTP server error")',
+        'return runCaptchaServerAndWait(mux, localCaptchaOrigin(), "", keyCh, "captcha HTTP server error")',
+        "update image CAPTCHA server call",
+    )
+    source = replace_once(
+        source,
+        'return runCaptchaServerAndWait(mux, localCaptchaURLForTarget(targetURL), keyCh, "proxy HTTP server error")',
+        'return runCaptchaServerAndWait(mux, localCaptchaURLForTarget(targetURL), redirectURI, keyCh, "proxy HTTP server error")',
+        "pass original VK redirect URI to Android",
+    )
+    path.write_text(source, encoding="utf-8")
+
+
+
 def patch_captcha_diagnostics(client: Path) -> None:
     path = client / "manual_captcha.go"
     source = path.read_text(encoding="utf-8")
@@ -440,6 +472,7 @@ def main() -> None:
     patch_main(client)
     patch_streams_per_credential(client)
     patch_manual_captcha(client)
+    patch_android_captcha_url(client)
     patch_captcha_diagnostics(client)
     patch_vk_captcha(client)
 
