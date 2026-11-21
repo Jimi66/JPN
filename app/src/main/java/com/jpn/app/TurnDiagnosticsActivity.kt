@@ -103,7 +103,7 @@ class TurnDiagnosticsActivity : Activity() {
                     }
                     startActivity(Intent.createChooser(share, "Отправить журнал диагностики"))
                 }.onFailure {
-                    Toast.makeText(this, "Не удалось подготовить файл журнала", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@TurnDiagnosticsActivity, "Не удалось подготовить файл журнала", Toast.LENGTH_LONG).show()
                 }
             }
         })
