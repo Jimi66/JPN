@@ -63,6 +63,11 @@ must remain local and do not need VPN protection.
 
 The upstream core CI already builds Android clients with Go, Android NDK
 r26d, API 21, `GOOS=android`, `GOARCH=arm64`, and `CGO_ENABLED=1`.
+JPN now has a manual-only workflow at
+`.github/workflows/build-turn-core.yml`. It checks out the upstream core at
+pinned commit `e8a96967dc66f3dbd631596ea6a8b9fe03f9be69`, applies the patcher,
+and uploads an arm64 executable artifact. The workflow has not been run yet.
+
 The Android artifact is an executable Go client (not a JNI library), launched
 by `ProcessBuilder` from the app's native-library directory.
 
@@ -71,7 +76,8 @@ by `ProcessBuilder` from the app's native-library directory.
 - Android FD-receive/protect bridge added to the JPN experimental branch.
 - Go-side IPC helper templates and a repeatable core patch script added.
 - The patch script has not yet been applied to a checked-out Go core or compiled.
-- The upstream Go core is not yet patched to use the helper.
+- A manual-only Android arm64 core build workflow has been added, but not run.
+- The upstream Go core is not yet patched in a build or compiled.
 - No TURN binary is bundled yet.
 - No build or device-level socket-protection test has been run.
 
