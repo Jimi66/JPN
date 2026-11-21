@@ -104,6 +104,11 @@ class MainActivity : Activity() {
 
     private lateinit var loadSubscriptionButton: Button
     private lateinit var nodesContainer: ListView
+    private lateinit var wireGuardNodesContainer: ListView
+    private lateinit var wireGuardNodesHeader: TextView
+    private lateinit var ordinaryNodesHeader: TextView
+    private var ordinaryNodeIndices: List<Int> = emptyList()
+    private var wireGuardNodeIndices: List<Int> = emptyList()
     private lateinit var nodesHeader: TextView
     private lateinit var subscriptionAnnouncementView: TextView
     private lateinit var subscriptionTrafficView: TextView
@@ -629,16 +634,8 @@ class MainActivity : Activity() {
             dividerHeight = dp(1)
             choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
             setOnItemClickListener { _, _, position, _ ->
-                val node = nodes.getOrNull(position) ?: return@setOnItemClickListener
-                selectedNodeIndex = position
-                preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
-                renderNodes()
-                val name = node.optString("tag").ifBlank { "Сервер ${position + 1}" }
-                if (isVpnRunning()) {
-                    connectToOutbound(node, name)
-                } else {
-                    setStatus("Выбран сервер: $name. VPN выключен — для подключения нажми «Вкл/Выкл».")
-                }
+                val globalIndex = ordinaryNodeIndices.getOrNull(position) ?: return@setOnItemClickListener
+                selectNodeAt(globalIndex)
             }
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
@@ -662,8 +659,35 @@ class MainActivity : Activity() {
             }
             clipToOutline = true
             addView(nodesHeaderRow, matchWidth())
+            ordinaryNodesHeader = sectionTitle("Другие серверы")
+            addView(ordinaryNodesHeader, matchWidth())
             addView(nodesContainer, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            wireGuardNodesHeader = sectionTitle("WireGuard")
+            addView(wireGuardNodesHeader, matchWidth())
+            wireGuardNodesContainer = ListView(this@MainActivity).apply {
+                divider = android.graphics.drawable.ColorDrawable(0xFFD6D6D6.toInt())
+                dividerHeight = dp(1)
+                choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
+                setOnItemClickListener { _, _, position, _ ->
+                    val globalIndex = wireGuardNodeIndices.getOrNull(position) ?: return@setOnItemClickListener
+                    selectNodeAt(globalIndex)
+                }
+                setOnTouchListener { view, event ->
+                    when (event.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN,
+                        android.view.MotionEvent.ACTION_MOVE ->
+                            view.parent?.requestDisallowInterceptTouchEvent(true)
+                        android.view.MotionEvent.ACTION_UP,
+                        android.view.MotionEvent.ACTION_CANCEL ->
+                            view.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                    false
+                }
+            }
+            addView(wireGuardNodesContainer, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ))
         }
         serverCard.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
@@ -1275,6 +1299,7 @@ class MainActivity : Activity() {
         button?.alpha = 0.45f
         vpnButton.isEnabled = false
         nodesContainer.isEnabled = false
+        wireGuardNodesContainer.isEnabled = false
 
         // libXray pingBatch refuses to run while the regular VPN core is alive.
         // Stop the tunnel, perform checks in isolation, then restore the same server.
@@ -1366,6 +1391,7 @@ class MainActivity : Activity() {
                     button?.alpha = 1f
                     vpnButton.isEnabled = true
                     nodesContainer.isEnabled = true
+                    wireGuardNodesContainer.isEnabled = true
                     val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
                     if (pingRestoreVpn) {
                         val restoreIndex = selectedNodeIndex.takeIf { it in nodes.indices }
@@ -1412,34 +1438,24 @@ class MainActivity : Activity() {
         return values.joinToString(" / ")
     }
 
-    private fun renderNodes() {
-        // ListView is an AdapterView: its rows are owned by the adapter.
-        // Calling removeAllViews() here throws UnsupportedOperationException
-        // and crashes the activity after subscription/QR import.
-        nodesHeader.text = if (nodes.isEmpty()) {
-            "Серверы не найдены"
+    private fun selectNodeAt(globalIndex: Int) {
+        val node = nodes.getOrNull(globalIndex) ?: return
+        selectedNodeIndex = globalIndex
+        preferences.edit().putInt(KEY_SELECTED_NODE_INDEX, selectedNodeIndex).apply()
+        renderNodes()
+        val name = node.optString("tag").ifBlank { "Сервер ${globalIndex + 1}" }
+        if (isVpnRunning()) {
+            connectToOutbound(node, name)
         } else {
-            val savedName = preferences.getString(KEY_SUBSCRIPTION_NAME, null)
-            decodeProfileTitle(savedName.orEmpty())
-                ?: runCatching {
-                    URL(preferences.getString(KEY_SUBSCRIPTION_URL, null)).host
-                }.getOrNull()?.takeIf { it.isNotBlank() }
-                ?: "Подписка"
+            setStatus("Выбран сервер: $name. VPN выключен — для подключения нажми «Вкл/Выкл».")
         }
+    }
 
-        val announcement = preferences.getString(KEY_SUBSCRIPTION_ANNOUNCE, null).orEmpty().trim()
-        subscriptionAnnouncementView.text = announcement
-        subscriptionAnnouncementView.visibility = if (nodes.isNotEmpty() && announcement.isNotBlank()) android.view.View.VISIBLE else android.view.View.GONE
-
-        val trafficText = formatSubscriptionTraffic(preferences.getString(KEY_SUBSCRIPTION_TRAFFIC, null))
-        subscriptionTrafficView.text = trafficText.orEmpty()
-        subscriptionTrafficView.visibility = if (nodes.isNotEmpty() && trafficText != null) android.view.View.VISIBLE else android.view.View.GONE
-
-        selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
-        nodesContainer.adapter = object : android.widget.BaseAdapter() {
-            override fun getCount(): Int = nodes.size
-            override fun getItem(position: Int): JSONObject = nodes[position]
-            override fun getItemId(position: Int): Long = position.toLong()
+    private fun createNodesAdapter(indices: List<Int>): android.widget.BaseAdapter =
+        object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = indices.size
+            override fun getItem(position: Int): JSONObject = nodes[indices[position]]
+            override fun getItemId(position: Int): Long = indices[position].toLong()
 
             override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
                 val row = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
@@ -1479,8 +1495,9 @@ class MainActivity : Activity() {
                     ))
                 }
 
-                val node = nodes[position]
-                val name = node.optString("tag").ifBlank { "Сервер ${position + 1}" }
+                val globalIndex = indices[position]
+                val node = nodes[globalIndex]
+                val name = node.optString("tag").ifBlank { "Сервер ${globalIndex + 1}" }
                 val latency = node.optInt("jpnPingMs", -1)
                 val latencyText = when {
                     latency >= 0 -> "$latency мс"
@@ -1500,53 +1517,90 @@ class MainActivity : Activity() {
                     visibility = if (latencyText.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
                 }
 
-                if (position == selectedNodeIndex) {
+                if (globalIndex == selectedNodeIndex) {
                     row.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     row.background = android.graphics.drawable.GradientDrawable().apply {
                         setColor(if (JpnTheme.isDark(this@MainActivity)) 0xFF484B56.toInt() else 0xFFE8E9F2.toInt())
                         cornerRadius = dp(8).toFloat()
                     }
-                    row.findViewWithTag<TextView>("server_name").setTextColor(JpnTheme.textPrimary(this@MainActivity))
-                    row.findViewWithTag<TextView>("server_latency").setTextColor(JpnTheme.textSecondary(this@MainActivity))
                 } else {
                     row.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-                    row.findViewWithTag<TextView>("server_name").setTextColor(JpnTheme.textPrimary(this@MainActivity))
-                    row.findViewWithTag<TextView>("server_latency").setTextColor(JpnTheme.textSecondary(this@MainActivity))
                 }
+                row.findViewWithTag<TextView>("server_name").setTextColor(JpnTheme.textPrimary(this@MainActivity))
+                row.findViewWithTag<TextView>("server_latency").setTextColor(JpnTheme.textSecondary(this@MainActivity))
                 return row
             }
         }
-        nodesContainer.visibility = if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+
+    private fun renderNodes() {
+        nodesHeader.text = if (nodes.isEmpty()) {
+            "Серверы не найдены"
+        } else {
+            val savedName = preferences.getString(KEY_SUBSCRIPTION_NAME, null)
+            decodeProfileTitle(savedName.orEmpty())
+                ?: runCatching {
+                    URL(preferences.getString(KEY_SUBSCRIPTION_URL, null)).host
+                }.getOrNull()?.takeIf { it.isNotBlank() }
+                ?: "Подписка"
+        }
+
+        val announcement = preferences.getString(KEY_SUBSCRIPTION_ANNOUNCE, null).orEmpty().trim()
+        subscriptionAnnouncementView.text = announcement
+        subscriptionAnnouncementView.visibility = if (nodes.isNotEmpty() && announcement.isNotBlank()) android.view.View.VISIBLE else android.view.View.GONE
+
+        val trafficText = formatSubscriptionTraffic(preferences.getString(KEY_SUBSCRIPTION_TRAFFIC, null))
+        subscriptionTrafficView.text = trafficText.orEmpty()
+        subscriptionTrafficView.visibility = if (nodes.isNotEmpty() && trafficText != null) android.view.View.VISIBLE else android.view.View.GONE
+
+        selectedNodeIndex = selectedNodeIndex.takeIf { it in nodes.indices } ?: -1
+        ordinaryNodeIndices = nodes.indices.filter {
+            !nodes[it].optString("protocol").equals("wireguard", ignoreCase = true)
+        }
+        wireGuardNodeIndices = nodes.indices.filter {
+            nodes[it].optString("protocol").equals("wireguard", ignoreCase = true)
+        }
+
+        nodesContainer.adapter = createNodesAdapter(ordinaryNodeIndices)
+        wireGuardNodesContainer.adapter = createNodesAdapter(wireGuardNodeIndices)
+        ordinaryNodesHeader.visibility = if (ordinaryNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        nodesContainer.visibility = if (ordinaryNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        wireGuardNodesHeader.visibility = if (wireGuardNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        wireGuardNodesContainer.visibility = if (wireGuardNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         if (::addSubscriptionButton.isInitialized) {
             addSubscriptionButton.visibility = if (nodes.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
         }
         (nodesContainer.parent as? android.view.View)?.visibility =
             if (nodes.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
 
-        // Size the list to its actual rows (up to 280dp); longer lists scroll
-        // inside the card instead of leaving a large empty area underneath.
-        nodesContainer.post {
-            val adapter = nodesContainer.adapter ?: return@post
-            val availableWidth = nodesContainer.width
-            if (availableWidth <= 0 || adapter.count == 0) return@post
-            var contentHeight = 0
-            for (index in 0 until adapter.count) {
-                val row = adapter.getView(index, null, nodesContainer)
-                row.measure(
-                    android.view.View.MeasureSpec.makeMeasureSpec(
-                        availableWidth, android.view.View.MeasureSpec.EXACTLY
-                    ),
-                    android.view.View.MeasureSpec.makeMeasureSpec(
-                        0, android.view.View.MeasureSpec.UNSPECIFIED
+        fun resizeList(list: ListView) {
+            list.post {
+                val adapter = list.adapter ?: return@post
+                val availableWidth = list.width
+                if (availableWidth <= 0 || adapter.count == 0) {
+                    list.layoutParams = list.layoutParams.apply { height = 0 }
+                    return@post
+                }
+                var contentHeight = 0
+                for (index in 0 until adapter.count) {
+                    val row = adapter.getView(index, null, list)
+                    row.measure(
+                        android.view.View.MeasureSpec.makeMeasureSpec(
+                            availableWidth, android.view.View.MeasureSpec.EXACTLY
+                        ),
+                        android.view.View.MeasureSpec.makeMeasureSpec(
+                            0, android.view.View.MeasureSpec.UNSPECIFIED
+                        )
                     )
-                )
-                contentHeight += row.measuredHeight
+                    contentHeight += row.measuredHeight
+                }
+                contentHeight += list.dividerHeight * (adapter.count - 1).coerceAtLeast(0)
+                list.layoutParams = list.layoutParams.apply {
+                    height = contentHeight.coerceAtMost(dp(220))
+                }
             }
-            contentHeight += nodesContainer.dividerHeight * (adapter.count - 1).coerceAtLeast(0)
-            val params = nodesContainer.layoutParams
-            params.height = contentHeight.coerceAtMost(dp(280))
-            nodesContainer.layoutParams = params
         }
+        resizeList(nodesContainer)
+        resizeList(wireGuardNodesContainer)
     }
 
     private fun connectToOutbound(outbound: JSONObject, name: String) {
