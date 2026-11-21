@@ -1,0 +1,63 @@
+name: Build JPN TURN core (arm64)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-turn-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out JPN
+        uses: actions/checkout@v6
+
+      - name: Check out pinned vk-turn-proxy core
+        uses: actions/checkout@v6
+        with:
+          repository: cacggghp/vk-turn-proxy
+          ref: e8a96967dc66f3dbd631596ea6a8b9fe03f9be69
+          path: vk-turn-proxy
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.5'
+          cache: false
+
+      - name: Set up Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: false
+
+      - name: Patch Go core for JPN per-socket protection
+        run: |
+          python3 tools/turn-core-patch/patch_core.py vk-turn-proxy/client
+
+      - name: Build Android arm64 client
+        working-directory: vk-turn-proxy
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          ANDROID_API: 26
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          TOOLCHAIN_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC="$TOOLCHAIN_BIN/aarch64-linux-android${ANDROID_API}-clang"
+          mkdir -p ../dist
+          go build -ldflags "-s -w -checklinkname=0" -trimpath \
+            -o ../dist/libvkturn.so ./client
+          file ../dist/libvkturn.so
+          readelf -h ../dist/libvkturn.so
+
+      - name: Upload TURN core artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: jpn-turn-core-arm64
+          path: dist/libvkturn.so
+          if-no-files-found: error
+          retention-days: 14
