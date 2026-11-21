@@ -185,12 +185,17 @@ class XrayVpnService : VpnService() {
 
         vpnInterface = builder.establish()
             ?: throw IllegalStateException("Android did not establish the VPN interface")
+        if (turnConfig != null && !testMode) {
+            TurnDiagnostics.record(this, "Android VPN/TUN-интерфейс успешно создан")
+        }
 
         // Start the per-socket bypass bridge only after Android has established
         // the VPN. The TURN child process will pass outbound socket FDs here via
         // SCM_RIGHTS; excluding the whole JPN package would also bypass Xray.
         if (turnConfig != null && !testMode) {
+            TurnDiagnostics.record(this, "Запуск защиты TURN-сокетов")
             turnSocketProtector = TurnSocketProtector(this).also { it.start() }
+            TurnDiagnostics.record(this, "Защита TURN-сокетов запущена")
             startTurnClient(turnConfig)
         }
 
@@ -239,6 +244,9 @@ class XrayVpnService : VpnService() {
             throw IllegalStateException(response.optString("error", "Xray failed to start"))
         }
         coreStarted = true
+        if (turnConfig != null && !testMode) {
+            TurnDiagnostics.record(this, "Xray core успешно запущен; ожидается обмен через TURN")
+        }
         val statusMessage = when {
             testMode -> "Тестовый туннель подключён"
             turnConfig != null -> "TURN-клиент запущен, ожидаю соединение"
@@ -248,6 +256,7 @@ class XrayVpnService : VpnService() {
     }
 
     private fun startTurnClient(turnConfig: JSONObject) {
+        TurnDiagnostics.record(this, "Подготовка TURN-клиента")
         val peer = turnConfig.optString("peer").trim()
         val vkLink = turnConfig.optString("vkLink").trim()
         val listen = turnConfig.optString("listen", "127.0.0.1:9000").trim()
@@ -280,14 +289,17 @@ class XrayVpnService : VpnService() {
         builder.environment()["VK_PROFILE_PATH"] =
             File(filesDir, "vk_profile.json").absolutePath
 
+        TurnDiagnostics.record(this, "Запуск Go TURN-процесса")
         val child = builder.start()
         turnProcess = child
+        TurnDiagnostics.setProcessState(this, true, null)
 
         Thread({
             runCatching {
                 child.inputStream.bufferedReader().useLines { output ->
                     output.forEach { line ->
                         Log.i("JPN-TURN", line)
+                        TurnDiagnostics.record(this@XrayVpnService, line)
                         when {
                             line.contains("Established DTLS connection", ignoreCase = true) -> {
                                 workerHandler.post {
@@ -322,6 +334,8 @@ class XrayVpnService : VpnService() {
                     if (turnProcess === child) {
                         turnProcess = null
                         Log.e("JPN-TURN", "TURN core exited unexpectedly: $exitCode")
+                        TurnDiagnostics.record(this@XrayVpnService, "TURN-процесс завершился с кодом: $exitCode")
+                        TurnDiagnostics.setProcessState(this@XrayVpnService, false, exitCode)
                         if (coreStarted) {
                             stopCoreAndTunnel()
                             publishState("error", "TURN-клиент завершился (код: $exitCode)", testMode)
@@ -346,6 +360,7 @@ class XrayVpnService : VpnService() {
             throw IllegalStateException("TURN-клиент не запустился (код: $exitCode)")
         }
         Log.i("JPN-TURN", "TURN client started; local listener: $listen")
+        TurnDiagnostics.record(this, "TURN-процесс запущен; локальный listener: $listen")
     }
 
     private fun stopCoreAndTunnel() {
@@ -363,6 +378,10 @@ class XrayVpnService : VpnService() {
 
         val child = turnProcess
         turnProcess = null
+        if (child != null) {
+            TurnDiagnostics.record(this, "Остановка TURN-процесса")
+            TurnDiagnostics.setProcessState(this, false, null)
+        }
         if (child != null) {
             runCatching { child.destroy() }
             val exited = runCatching { child.waitFor(1, TimeUnit.SECONDS) }.getOrDefault(false)

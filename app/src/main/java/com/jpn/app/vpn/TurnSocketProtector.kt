@@ -39,6 +39,7 @@ internal class TurnSocketProtector(
 
         val localServer = LocalServerSocket(SOCKET_NAME)
         server = localServer
+        TurnDiagnostics.record(vpnService, "Локальный сокет защиты TURN создан")
 
         acceptThread = Thread({
             while (!closed.get()) {
@@ -47,6 +48,7 @@ internal class TurnSocketProtector(
                 } catch (error: IOException) {
                     if (!closed.get()) {
                         Log.e("JPN-TURN", "Socket-protection listener stopped unexpectedly", error)
+                        TurnDiagnostics.record(vpnService, "Ошибка listener защиты сокетов: ${error.javaClass.simpleName}")
                         close()
                     }
                     break
@@ -75,6 +77,7 @@ internal class TurnSocketProtector(
                 // descriptor-protection requests to JPN's own UID (including
                 // its child processes).
                 if (socket.peerCredentials.uid != Process.myUid()) {
+                    TurnDiagnostics.record(vpnService, "Отклонён запрос защиты сокета: UID не совпадает")
                     socket.outputStream.write(0)
                     socket.outputStream.flush()
                     return
@@ -84,6 +87,7 @@ internal class TurnSocketProtector(
                 receivedDescriptors = socket.ancillaryFileDescriptors ?: emptyArray()
                 val received = receivedDescriptors.firstOrNull()
                 if (received == null) {
+                    TurnDiagnostics.record(vpnService, "Go-клиент запросил защиту, но FD не передан")
                     socket.outputStream.write(0)
                     socket.outputStream.flush()
                     return
@@ -93,9 +97,11 @@ internal class TurnSocketProtector(
                     vpnService.protect(duplicate.fd)
                 }
 
+                TurnDiagnostics.record(vpnService, if (protected) "Защита исходящего TURN-сокета: успешно" else "Защита исходящего TURN-сокета: protect() вернул false")
                 socket.outputStream.write(if (protected) 1 else 0)
                 socket.outputStream.flush()
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                TurnDiagnostics.record(vpnService, "Ошибка обработки защиты сокета: ${error.javaClass.simpleName}")
                 runCatching {
                     socket.outputStream.write(0)
                     socket.outputStream.flush()

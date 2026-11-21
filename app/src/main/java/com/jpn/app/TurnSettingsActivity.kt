@@ -100,6 +100,26 @@ class TurnSettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
+        root.addView(TextView(this).apply {
+            text = "Диагностика TURN"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(22), 0, dp(6))
+        })
+        root.addView(TextView(this).apply {
+            text = "Журнал запуска и соединения поможет определить, на каком этапе останавливается подключение."
+            textSize = 13f
+            setPadding(0, 0, 0, dp(8))
+        })
+        root.addView(Button(this).apply {
+            text = "Открыть журнал диагностики"
+            setOnClickListener {
+                startActivity(Intent(this@TurnSettingsActivity, TurnDiagnosticsActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
         val scroll = ScrollView(this).apply { addView(root) }
         setContentView(scroll)
         JpnTheme.apply(this, scroll)
