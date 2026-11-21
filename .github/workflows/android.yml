@@ -69,7 +69,7 @@ jobs:
           TOOLCHAIN_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CC="$TOOLCHAIN_BIN/aarch64-linux-android${ANDROID_API}-clang"
           mkdir -p ../dist
-          go build -ldflags "-s -w -checklinkname=0" -trimpath \\
+          go build -ldflags "-s -w -checklinkname=0" -trimpath \
             -o ../dist/libvkturn.so ./client
           file ../dist/libvkturn.so
           readelf -h ../dist/libvkturn.so
