@@ -31,6 +31,14 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // The TURN Go core is an executable packaged in jniLibs. Force extraction
+    // so ProcessBuilder can launch it from ApplicationInfo.nativeLibraryDir.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
