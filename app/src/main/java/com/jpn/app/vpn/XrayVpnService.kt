@@ -41,6 +41,16 @@ class XrayVpnService : VpnService() {
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
 
+        // A single process-wide queue serializes VPN lifecycle work across
+        // service instances. A replacement service must not start its core
+        // while the previous instance is still cleaning up.
+        @Volatile private var sharedWorkerHandler: Handler? = null
+
+        private fun lifecycleHandler(): Handler = synchronized(XrayVpnService::class.java) {
+            sharedWorkerHandler ?: HandlerThread("JPN-Xray-Service").apply { start() }
+                .let { thread -> Handler(thread.looper).also { sharedWorkerHandler = it } }
+        }
+
         fun start(context: Context, xrayJson: String, testMode: Boolean = false) {
             val intent = Intent(context, XrayVpnService::class.java).apply {
                 action = ACTION_START
@@ -66,7 +76,6 @@ class XrayVpnService : VpnService() {
         }
     }
 
-    private lateinit var workerThread: HandlerThread
     private lateinit var workerHandler: Handler
     @Volatile private var latestStartId: Int = 0
 
@@ -84,8 +93,7 @@ class XrayVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        workerThread = HandlerThread("JPN-Xray-Service").apply { start() }
-        workerHandler = Handler(workerThread.looper)
+        workerHandler = lifecycleHandler()
     }
 
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
@@ -435,11 +443,14 @@ class XrayVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        // Keep cleanup off Android's main thread. quitSafely() drains this task
-        // and any lifecycle work already queued ahead of it.
+        // Cleanup is queued on the process-wide lifecycle worker. Do not stop
+        // that worker here: a replacement service instance must share the same
+        // queue and wait behind this cleanup before starting another TURN core.
         if (::workerHandler.isInitialized) {
-            workerHandler.post { stopCoreAndTunnel() }
-            workerThread.quitSafely()
+            workerHandler.post {
+                stopCoreAndTunnel()
+                TurnDiagnostics.record(this, "Очистка VPN/TURN при уничтожении сервиса завершена")
+            }
         }
         super.onDestroy()
     }
