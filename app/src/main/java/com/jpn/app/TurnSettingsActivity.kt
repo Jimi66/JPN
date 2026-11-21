@@ -1,0 +1,172 @@
+package com.jpn.app
+
+import android.app.Activity
+import android.graphics.Typeface
+import android.os.Bundle
+import android.text.InputType
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Switch
+import android.widget.TextView
+import android.widget.Toast
+
+class TurnSettingsActivity : Activity() {
+
+    private lateinit var enabledSwitch: Switch
+    private lateinit var peerInput: EditText
+    private lateinit var vkLinkInput: EditText
+    private lateinit var portInput: EditText
+    private lateinit var threadsInput: EditText
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        JpnTheme.applyBeforeCreate(this)
+
+        val prefs = getSharedPreferences("jpn_settings", MODE_PRIVATE)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(12), dp(18), dp(20))
+        }
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            view.setPadding(dp(18), dp(12) + insets.systemWindowInsetTop,
+                dp(18), dp(20) + insets.systemWindowInsetBottom)
+            insets
+        }
+
+        root.addView(TextView(this).apply {
+            text = "‹   Назад"
+            textSize = 18f
+            setTextColor(0xFF514B83.toInt())
+            setPadding(dp(4), dp(8), dp(4), dp(12))
+            setOnClickListener { finish() }
+        })
+
+        root.addView(TextView(this).apply {
+            text = "TURN-клиент"
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(14))
+        })
+
+        enabledSwitch = Switch(this).apply {
+            text = "Использовать TURN для WireGuard"
+            textSize = 16f
+            isChecked = prefs.getBoolean(KEY_ENABLED, false)
+            setPadding(dp(4), dp(10), dp(4), dp(10))
+        }
+        root.addView(enabledSwitch)
+
+        root.addView(TextView(this).apply {
+            text = "TURN-клиент будет принимать WireGuard UDP-трафик локально и передавать его через VK Calls на твой TURN-сервер. Остальные типы серверов JPN не затрагиваются."
+            textSize = 13f
+            setPadding(0, dp(2), 0, dp(14))
+        })
+
+        peerInput = addField(root, "Адрес TURN-сервера (host:port)",
+            prefs.getString(KEY_PEER, "").orEmpty(),
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+
+        vkLinkInput = addField(root, "Ссылка VK Calls",
+            prefs.getString(KEY_VK_LINK, "").orEmpty(),
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+
+        portInput = addField(root, "Локальный UDP-порт",
+            prefs.getString(KEY_LOCAL_PORT, "9000") ?: "9000",
+            InputType.TYPE_CLASS_NUMBER)
+
+        threadsInput = addField(root, "Количество потоков",
+            prefs.getString(KEY_THREADS, "12") ?: "12",
+            InputType.TYPE_CLASS_NUMBER)
+
+        root.addView(TextView(this).apply {
+            text = "На первом этапе реализован UDP-режим. Для подключения выбери в JPN WireGuard-профиль. Локальный адрес будет 127.0.0.1, порт задаётся выше."
+            textSize = 12f
+            setPadding(0, dp(10), 0, dp(18))
+        })
+
+        val save = Button(this).apply {
+            text = "Сохранить"
+            setOnClickListener { saveSettings() }
+        }
+        root.addView(save, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        val scroll = ScrollView(this).apply { addView(root) }
+        setContentView(scroll)
+        JpnTheme.apply(this, scroll)
+    }
+
+    private fun addField(
+        parent: LinearLayout,
+        label: String,
+        value: String,
+        inputType: Int
+    ): EditText {
+        parent.addView(TextView(this).apply {
+            text = label
+            textSize = 14f
+            setPadding(0, dp(8), 0, dp(5))
+        })
+        return EditText(this).apply {
+            this.inputType = inputType
+            singleLine = true
+            setText(value)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            parent.addView(this, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+        }
+    }
+
+    private fun saveSettings() {
+        val peer = peerInput.text.toString().trim()
+        val vkLink = vkLinkInput.text.toString().trim()
+        val port = portInput.text.toString().trim().toIntOrNull()
+        val threads = threadsInput.text.toString().trim().toIntOrNull()
+        val enabled = enabledSwitch.isChecked
+
+        if (enabled && peer.isBlank()) {
+            peerInput.error = "Укажи адрес TURN-сервера"
+            return
+        }
+        if (enabled && (!vkLink.startsWith("https://") && !vkLink.startsWith("http://"))) {
+            vkLinkInput.error = "Укажи ссылку VK Calls"
+            return
+        }
+        if (port == null || port !in 1024..65535) {
+            portInput.error = "Порт должен быть от 1024 до 65535"
+            return
+        }
+        if (threads == null || threads !in 1..64) {
+            threadsInput.error = "Количество потоков: от 1 до 64"
+            return
+        }
+
+        getSharedPreferences("jpn_settings", MODE_PRIVATE).edit()
+            .putBoolean(KEY_ENABLED, enabled)
+            .putString(KEY_PEER, peer)
+            .putString(KEY_VK_LINK, vkLink)
+            .putString(KEY_LOCAL_PORT, port.toString())
+            .putString(KEY_THREADS, threads.toString())
+            .apply()
+
+        Toast.makeText(this, "Настройки TURN сохранены", Toast.LENGTH_SHORT).show()
+        setResult(RESULT_OK)
+        finish()
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        const val KEY_ENABLED = "turn_enabled"
+        const val KEY_PEER = "turn_peer"
+        const val KEY_VK_LINK = "turn_vk_link"
+        const val KEY_LOCAL_PORT = "turn_local_port"
+        const val KEY_THREADS = "turn_threads"
+    }
+}
