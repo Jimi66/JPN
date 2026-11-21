@@ -12,10 +12,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import libXray.DialerController
 import libXray.LibXray
+import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * Android TUN owner for the native Xray core.
@@ -63,6 +66,7 @@ class XrayVpnService : VpnService() {
     // All native Xray and TUN lifecycle operations are serialized on this thread.
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
     private var turnSocketProtector: TurnSocketProtector? = null
+    @Volatile private var turnProcess: java.lang.Process? = null
     private var coreStarted = false
     private var testMode = false
 
@@ -136,9 +140,11 @@ class XrayVpnService : VpnService() {
         val config = JSONObject(sourceConfig)
         val tunMtu = config.optInt("jpnTunMtu", 1500).coerceIn(1280, 9000)
         val sniffingEnabled = config.optBoolean("jpnSniffingEnabled", true)
+        val turnConfig = config.optJSONObject("jpnTurn")?.let { JSONObject(it.toString()) }
         // These are JPN-side controls, not Xray configuration fields.
         config.remove("jpnTunMtu")
         config.remove("jpnSniffingEnabled")
+        config.remove("jpnTurn")
 
         val builder = Builder()
             .setSession("JPN")
@@ -183,7 +189,10 @@ class XrayVpnService : VpnService() {
         // Start the per-socket bypass bridge only after Android has established
         // the VPN. The TURN child process will pass outbound socket FDs here via
         // SCM_RIGHTS; excluding the whole JPN package would also bypass Xray.
-        turnSocketProtector = TurnSocketProtector(this).also { it.start() }
+        if (turnConfig != null && !testMode) {
+            turnSocketProtector = TurnSocketProtector(this).also { it.start() }
+            startTurnClient(turnConfig)
+        }
 
         // Xray's outbound sockets must bypass this VPN interface to avoid a routing loop.
         LibXray.registerDialerController(socketController)
@@ -233,9 +242,87 @@ class XrayVpnService : VpnService() {
         publishState("connected", if (testMode) "Тестовый туннель подключён" else "VPN подключён", testMode)
     }
 
+    private fun startTurnClient(turnConfig: JSONObject) {
+        val peer = turnConfig.optString("peer").trim()
+        val vkLink = turnConfig.optString("vkLink").trim()
+        val listen = turnConfig.optString("listen", "127.0.0.1:9000").trim()
+        val threads = turnConfig.optInt("threads", 12).coerceIn(1, 64)
+        if (peer.isBlank() || vkLink.isBlank()) {
+            throw IllegalStateException("Не заполнены адрес TURN-сервера и ссылка VK Calls")
+        }
+
+        // Android extracts jniLibs into nativeLibraryDir with executable
+        // permissions. The Go binary is an executable, not a JNI library.
+        val executable = File(applicationInfo.nativeLibraryDir, "libvkturn.so")
+        if (!executable.isFile || !executable.canExecute()) {
+            throw IllegalStateException("TURN-ядро не найдено в APK или не имеет права на запуск")
+        }
+
+        val command = listOf(
+            executable.absolutePath,
+            "-peer", peer,
+            "-vk-link", vkLink,
+            "-listen", listen,
+            "-n", threads.toString(),
+            "-udp",
+            "--manual-captcha"
+        )
+        val builder = ProcessBuilder(command).redirectErrorStream(true)
+        builder.directory(filesDir)
+        builder.environment()["JPN_TURN_PROTECT_SOCKET"] = "@jpn.turn.protect"
+        builder.environment()["VK_PROFILE_PATH"] =
+            File(filesDir, "vk_profile.json").absolutePath
+
+        val child = builder.start()
+        turnProcess = child
+
+        Thread({
+            runCatching {
+                child.inputStream.bufferedReader().useLines { output ->
+                    output.forEach { line -> Log.i("JPN-TURN", line) }
+                }
+            }.onFailure { error ->
+                Log.w("JPN-TURN", "Could not read TURN core output", error)
+            }
+        }, "JPN-TURN-Output").apply {
+            isDaemon = true
+            start()
+        }
+
+        Thread({
+            val exitCode = runCatching { child.waitFor() }.getOrDefault(-1)
+            if (turnProcess === child) {
+                workerHandler.post {
+                    if (turnProcess === child) {
+                        turnProcess = null
+                        Log.e("JPN-TURN", "TURN core exited unexpectedly: $exitCode")
+                        if (coreStarted) {
+                            stopCoreAndTunnel()
+                            publishState("error", "TURN-клиент завершился (код: $exitCode)", testMode)
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        }
+                    }
+                }
+            }
+        }, "JPN-TURN-Watcher").apply {
+            isDaemon = true
+            start()
+        }
+
+        // UDP listener creation happens immediately in the Go core. A short
+        // liveness check catches missing libraries, bind errors and bad binaries
+        // before Xray starts sending WireGuard packets to the local port.
+        Thread.sleep(400)
+        if (!child.isAlive) {
+            val exitCode = runCatching { child.exitValue() }.getOrDefault(-1)
+            turnProcess = null
+            throw IllegalStateException("TURN-клиент не запустился (код: $exitCode)")
+        }
+        Log.i("JPN-TURN", "TURN client started; local listener: $listen")
+    }
+
     private fun stopCoreAndTunnel() {
-        runCatching { turnSocketProtector?.close() }
-        turnSocketProtector = null
         if (coreStarted) {
             runCatching {
                 LibXray.invoke(
@@ -247,6 +334,17 @@ class XrayVpnService : VpnService() {
             }
             coreStarted = false
         }
+
+        val child = turnProcess
+        turnProcess = null
+        if (child != null) {
+            runCatching { child.destroy() }
+            val exited = runCatching { child.waitFor(1, TimeUnit.SECONDS) }.getOrDefault(false)
+            if (!exited) runCatching { child.destroyForcibly() }
+        }
+
+        runCatching { turnSocketProtector?.close() }
+        turnSocketProtector = null
         runCatching { vpnInterface?.close() }
         vpnInterface = null
     }
