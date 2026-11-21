@@ -62,6 +62,7 @@ class XrayVpnService : VpnService() {
 
     // All native Xray and TUN lifecycle operations are serialized on this thread.
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
+    private var turnSocketProtector: TurnSocketProtector? = null
     private var coreStarted = false
     private var testMode = false
 
@@ -179,6 +180,11 @@ class XrayVpnService : VpnService() {
         vpnInterface = builder.establish()
             ?: throw IllegalStateException("Android did not establish the VPN interface")
 
+        // Start the per-socket bypass bridge only after Android has established
+        // the VPN. The TURN child process will pass outbound socket FDs here via
+        // SCM_RIGHTS; excluding the whole JPN package would also bypass Xray.
+        turnSocketProtector = TurnSocketProtector(this).also { it.start() }
+
         // Xray's outbound sockets must bypass this VPN interface to avoid a routing loop.
         LibXray.registerDialerController(socketController)
         LibXray.registerListenerController(socketController)
@@ -228,6 +234,8 @@ class XrayVpnService : VpnService() {
     }
 
     private fun stopCoreAndTunnel() {
+        runCatching { turnSocketProtector?.close() }
+        turnSocketProtector = null
         if (coreStarted) {
             runCatching {
                 LibXray.invoke(
