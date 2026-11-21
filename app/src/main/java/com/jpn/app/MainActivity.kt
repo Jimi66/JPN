@@ -91,6 +91,7 @@ class MainActivity : Activity() {
         const val ACTION_QUICK_SETTINGS_TOGGLE = "com.jpn.app.action.QUICK_SETTINGS_TOGGLE"
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
         const val KEY_PENDING_TURN_CAPTCHA = "turn_pending_captcha_url"
+        @Volatile private var pingGStarted = false
         @Volatile var isVisible: Boolean = false
             private set
     }
@@ -162,6 +163,10 @@ class MainActivity : Activity() {
 
     private var appliedDarkTheme: Boolean = false
     private var launchedFromQuickSettings: Boolean = false
+    @Volatile private var pingGResult: Boolean? = null
+    private var mainInitializationCompleted = false
+    private var startupDialogShowing = false
+    private var pingGWarningShown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         launchedFromQuickSettings = intent?.action == ACTION_QUICK_SETTINGS_TOGGLE
@@ -171,6 +176,7 @@ class MainActivity : Activity() {
         appliedDarkTheme = JpnTheme.isDark(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
+        startPingGCheck()
         ensureGeoDatabasesBeforeUse()
 
     }
@@ -255,13 +261,80 @@ class MainActivity : Activity() {
         AutoGeoDatabaseScheduler.update(this)
         refreshVpnState()
         handleQuickSettingsIntent(intent)
+        mainInitializationCompleted = true
         if (nodes.isEmpty() && !launchedFromQuickSettings) {
-            android.app.AlertDialog.Builder(this)
+            val noServersDialog = android.app.AlertDialog.Builder(this)
                 .setTitle("Серверы не добавлены")
                 .setMessage("Нажмите «+», чтобы добавить подписку.")
                 .setPositiveButton("Понятно", null)
-                .show()
+                .create()
+            startupDialogShowing = true
+            noServersDialog.setOnDismissListener {
+                startupDialogShowing = false
+                showPingGWarningIfReady()
+            }
+            noServersDialog.show()
+        } else {
+            showPingGWarningIfReady()
         }
+    }
+
+    private fun startPingGCheck() {
+        if (launchedFromQuickSettings || pingGStarted) return
+        pingGStarted = true
+
+        Thread({
+            val reachable = PingG()
+            mainHandler.post {
+                pingGResult = reachable
+                showPingGWarningIfReady()
+            }
+        }, "JPN-PingG").start()
+    }
+
+    /**
+     * Checks Google reachability through the device's current ordinary network path.
+     * It does not start or invoke VPN, Xray, TURN, or any proxy mechanism.
+     */
+    private fun PingG(): Boolean {
+        var connection: HttpURLConnection? = null
+        return try {
+            val activeConnection = URL("https://www.gstatic.com/generate_204")
+                .openConnection() as HttpURLConnection
+            connection = activeConnection
+            activeConnection.apply {
+                requestMethod = "GET"
+                connectTimeout = 4000
+                readTimeout = 4000
+                instanceFollowRedirects = false
+                useCaches = false
+            }
+            activeConnection.responseCode == 204
+        } catch (_: Exception) {
+            false
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun showPingGWarningIfReady() {
+        if (!mainInitializationCompleted ||
+            startupDialogShowing ||
+            pingGWarningShown ||
+            pingGResult != false ||
+            isFinishing ||
+            isDestroyed
+        ) return
+
+        pingGWarningShown = true
+        val warning = android.app.AlertDialog.Builder(this)
+            .setTitle("Внимание")
+            .setMessage("Возможно включён белый список, пользуйся только TURN серверами")
+            .setPositiveButton("Понятно", null)
+            .create()
+        startupDialogShowing = true
+        warning.setOnDismissListener { startupDialogShowing = false }
+        warning.show()
     }
 
     override fun onNewIntent(intent: Intent?) {
