@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">JPN</string>
+    <string name="app_name">JPN whis TURN</string>
     <string name="bootstrap_status">Основа приложения создана. VPN-функции находятся в разработке.</string>
 </resources>
