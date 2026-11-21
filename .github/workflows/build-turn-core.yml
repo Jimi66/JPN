@@ -1,6 +1,12 @@
 name: Build JPN TURN core (arm64)
 
 on:
+  push:
+    branches:
+      - jpn-1.2.0-whis-turn
+    paths:
+      - '.github/workflows/build-turn-core.yml'
+      - 'tools/turn-core-patch/**'
   workflow_dispatch:
 
 permissions:
