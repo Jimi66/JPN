@@ -1522,6 +1522,43 @@ class MainActivity : Activity() {
         val metadata = selectedOutbound.optJSONObject("jpnSubscriptionMetadata")
         val selected = SubscriptionMetadata.applyToOutbound(selectedOutbound)
         selected.remove("jpnSubscriptionMetadata")
+
+        // TURN is an additional transport for a WireGuard profile. The original
+        // remote WG endpoint is replaced only in this in-memory Xray config;
+        // the saved subscription profile remains unchanged.
+        val turnPrefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        val turnConfig = if (turnPrefs.getBoolean(TurnSettingsActivity.KEY_ENABLED, false)) {
+            if (!selected.optString("protocol").equals("wireguard", ignoreCase = true)) {
+                throw IllegalArgumentException("TURN на первом этапе работает только с WireGuard-профилями")
+            }
+            val turnPeer = turnPrefs.getString(TurnSettingsActivity.KEY_PEER, "").orEmpty().trim()
+            val vkLink = turnPrefs.getString(TurnSettingsActivity.KEY_VK_LINK, "").orEmpty().trim()
+            val localPort = turnPrefs.getString(TurnSettingsActivity.KEY_LOCAL_PORT, "9000")
+                ?.toIntOrNull()?.takeIf { it in 1024..65535 }
+                ?: throw IllegalArgumentException("Проверь локальный UDP-порт в настройках TURN")
+            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "12")
+                ?.toIntOrNull()?.takeIf { it in 1..64 }
+                ?: throw IllegalArgumentException("Проверь количество потоков в настройках TURN")
+            if (turnPeer.isBlank() || vkLink.isBlank()) {
+                throw IllegalArgumentException("Заполни адрес TURN-сервера и ссылку VK Calls в настройках TURN")
+            }
+            val peers = selected.optJSONObject("settings")?.optJSONArray("peers")
+                ?: throw IllegalArgumentException("В WireGuard-профиле не найдены настройки Peer")
+            if (peers.length() != 1) {
+                throw IllegalArgumentException("TURN пока поддерживает WireGuard-профиль с одним Peer")
+            }
+            val wgPeer = peers.optJSONObject(0)
+                ?: throw IllegalArgumentException("Некорректный WireGuard Peer")
+            wgPeer.put("endpoint", "127.0.0.1:$localPort")
+            JSONObject()
+                .put("peer", turnPeer)
+                .put("vkLink", vkLink)
+                .put("listen", "127.0.0.1:$localPort")
+                .put("threads", threads)
+        } else {
+            null
+        }
+
         val subscriptionDns = selectedOutbound.optJSONObject("jpnSubscriptionDns")
         selected.remove("jpnSubscriptionDns")
 
@@ -1562,6 +1599,7 @@ class MainActivity : Activity() {
             .put("dns", dns)
             .put("outbounds", outbounds)
             .put("env", JSONObject().put("xray.location.asset", filesDir.absolutePath))
+        if (turnConfig != null) config.put("jpnTurn", turnConfig)
 
         val tunMtu = metadata?.optString("xray-tun-mtu")?.toIntOrNull()
             ?.takeIf { it in 1280..9000 } ?: 1500
