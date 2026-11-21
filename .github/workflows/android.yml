@@ -76,6 +76,9 @@ jobs:
           mkdir -p ../app/src/main/jniLibs/arm64-v8a
           cp ../dist/libvkturn.so ../app/src/main/jniLibs/arm64-v8a/libvkturn.so
           test -s ../app/src/main/jniLibs/arm64-v8a/libvkturn.so
+          mkdir -p ../app/src/main/assets/licenses
+          cp LICENSE ../app/src/main/assets/licenses/turn-core-GPL-3.0.txt
+          test -s ../app/src/main/assets/licenses/turn-core-GPL-3.0.txt
 
       - name: Checkout pinned libXray source
         run: |
