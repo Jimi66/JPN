@@ -45,7 +45,37 @@ jobs:
           packages: platform-tools
 
       - name: Install Android platform, build tools and NDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "ndk;26.3.11579264"
+
+      - name: Checkout pinned TURN Go core
+        uses: actions/checkout@v4
+        with:
+          repository: cacggghp/vk-turn-proxy
+          ref: e8a96967dc66f3dbd631596ea6a8b9fe03f9be69
+          path: vk-turn-proxy
+
+      - name: Patch TURN core for JPN socket protection
+        run: python3 tools/turn-core-patch/patch_core.py vk-turn-proxy/client
+
+      - name: Build and package TURN core (arm64)
+        working-directory: vk-turn-proxy
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          ANDROID_API: 26
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
+          TOOLCHAIN_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC="$TOOLCHAIN_BIN/aarch64-linux-android${ANDROID_API}-clang"
+          mkdir -p ../dist
+          go build -ldflags "-s -w -checklinkname=0" -trimpath \\
+            -o ../dist/libvkturn.so ./client
+          file ../dist/libvkturn.so
+          readelf -h ../dist/libvkturn.so
+          mkdir -p ../app/src/main/jniLibs/arm64-v8a
+          cp ../dist/libvkturn.so ../app/src/main/jniLibs/arm64-v8a/libvkturn.so
+          test -s ../app/src/main/jniLibs/arm64-v8a/libvkturn.so
 
       - name: Checkout pinned libXray source
         run: |
