@@ -3,6 +3,7 @@ package com.jpn.app.vpn
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -34,6 +35,7 @@ class XrayVpnService : VpnService() {
         const val EXTRA_XRAY_JSON = "xray_json"
         const val EXTRA_TEST_MODE = "test_mode"
         const val ACTION_STATE_CHANGED = "com.jpn.app.vpn.STATE_CHANGED"
+        const val EXTRA_CAPTCHA_URL = "captcha_url"
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
@@ -301,6 +303,16 @@ class XrayVpnService : VpnService() {
                         Log.i("JPN-TURN", line)
                         TurnDiagnostics.record(this@XrayVpnService, line)
                         when {
+                            line.startsWith("JPN_CAPTCHA_URL=") -> {
+                                val captchaUrl = line.substringAfter("JPN_CAPTCHA_URL=").trim()
+                                workerHandler.post {
+                                    if (turnProcess === child && coreStarted) {
+                                        showTurnCaptchaNotification(captchaUrl)
+                                        publishState("connecting", "Ожидается подтверждение CAPTCHA VK", testMode)
+                                        TurnDiagnostics.record(this@XrayVpnService, "VK CAPTCHA передана во встроенный WebView через уведомление")
+                                    }
+                                }
+                            }
                             line.contains("Established DTLS connection", ignoreCase = true) -> {
                                 workerHandler.post {
                                     if (turnProcess === child && coreStarted) {
@@ -413,6 +425,38 @@ class XrayVpnService : VpnService() {
         super.onDestroy()
     }
 
+
+    private fun showTurnCaptchaNotification(url: String) {
+        val uri = android.net.Uri.parse(url)
+        if (uri.scheme != "http" || uri.host !in setOf("localhost", "127.0.0.1", "::1") || uri.port != 8765) {
+            TurnDiagnostics.record(this, "Отклонён небезопасный URL CAPTCHA")
+            return
+        }
+        val intent = Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
+            putExtra(EXTRA_CAPTCHA_URL, url)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            4102,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        })
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("JPN — требуется проверка VK")
+            .setContentText("Нажмите, чтобы открыть CAPTCHA")
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .addAction(0, "Открыть CAPTCHA", pendingIntent)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+    }
 
     private fun publishState(state: String, message: String, isTestMode: Boolean = testMode) {
         if (!isTestMode) {

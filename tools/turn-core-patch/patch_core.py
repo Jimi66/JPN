@@ -310,6 +310,77 @@ def patch_manual_captcha(client: Path) -> None:
     source = source.replace("*dnsdialer.Dialer", "*net.Dialer")
     if "dnsdialer" in source:
         raise RuntimeError("dnsdialer references remain in client/manual_captcha.go")
+    source = replace_once(
+        source,
+        '\topenBrowser(captchaURL)\n',
+        '\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\n'
+        '\tif runtime.GOOS != "android" {\n'
+        '\t\topenBrowser(captchaURL)\n'
+        '\t}\n',
+        "hand off Android CAPTCHA URL to WebView",
+    )
+    path.write_text(source, encoding="utf-8")
+
+
+def patch_vk_captcha(client: Path) -> None:
+    path = client / "main.go"
+    source = path.read_text(encoding="utf-8")
+    old_fields = (
+        '\t// Extract captcha_sid\n'
+        '\tcaptchaSid, ok := errData["captcha_sid"].(string)\n'
+        '\tif !ok {\n'
+        '\t\t// try numeric\n'
+        '\t\tif sidNum, ok2 := errData["captcha_sid"].(float64); ok2 {\n'
+        '\t\t\tcaptchaSid = fmt.Sprintf("%.0f", sidNum)\n'
+        '\t\t} else {\n'
+        '\t\t\tlog.Printf("missing captcha_sid in captcha error data")\n'
+        '\t\t\treturn nil\n'
+        '\t\t}\n'
+        '\t}\n'
+        '\n'
+        '\t// Extract captcha_img\n'
+        '\tcaptchaImg, ok := errData["captcha_img"].(string)\n'
+        '\tif !ok {\n'
+        '\t\tlog.Printf("missing captcha_img in captcha error data")\n'
+        '\t\treturn nil\n'
+        '\t}\n'
+    )
+    new_fields = (
+        '\t// captcha_sid and captcha_img are optional in VK redirect-based CAPTCHA responses.\n'
+        '\tvar captchaSid string\n'
+        '\tif sid, ok := errData["captcha_sid"].(string); ok {\n'
+        '\t\tcaptchaSid = sid\n'
+        '\t} else if sidNum, ok := errData["captcha_sid"].(float64); ok {\n'
+        '\t\tcaptchaSid = fmt.Sprintf("%.0f", sidNum)\n'
+        '\t}\n'
+        '\tvar captchaImg string\n'
+        '\tif img, ok := errData["captcha_img"].(string); ok {\n'
+        '\t\tcaptchaImg = img\n'
+        '\t}\n'
+    )
+    source = replace_once(source, old_fields, new_fields, "optional VK captcha fields")
+    old_request = (
+        '\t\t\t\tif captchaKey != "" {\n'
+        '\t\t\t\t\tdata = fmt.Sprintf("vk_join_link=https://vk.com/call/join/%s&name=%s&captcha_key=%s&captcha_sid=%s&access_token=%s",\n'
+        '\t\t\t\t\t\tlink, escapedName, neturl.QueryEscape(captchaKey), captchaErr.CaptchaSid, token1)\n'
+        '\t\t\t\t} else {\n'
+        '\t\t\t\t\tdata = fmt.Sprintf("vk_join_link=https://vk.com/call/join/%s&name=%s&captcha_key=&captcha_sid=%s&is_sound_captcha=0&success_token=%s&captcha_ts=%s&captcha_attempt=%s&access_token=%s",\n'
+        '\t\t\t\t\t\tlink, escapedName, captchaErr.CaptchaSid, neturl.QueryEscape(successToken), captchaErr.CaptchaTs, captchaErr.CaptchaAttempt, token1)\n'
+        '\t\t\t\t}\n'
+    )
+    new_request = (
+        '\t\t\t\tif captchaKey != "" {\n'
+        '\t\t\t\t\tdata = fmt.Sprintf("vk_join_link=https://vk.com/call/join/%s&name=%s&captcha_key=%s&access_token=%s",\n'
+        '\t\t\t\t\t\tlink, escapedName, neturl.QueryEscape(captchaKey), token1)\n'
+        '\t\t\t\t} else {\n'
+        '\t\t\t\t\tdata = fmt.Sprintf("vk_join_link=https://vk.com/call/join/%s&name=%s&captcha_key=&is_sound_captcha=0&success_token=%s&captcha_ts=%s&captcha_attempt=%s&access_token=%s",\n'
+        '\t\t\t\t\t\tlink, escapedName, neturl.QueryEscape(successToken), captchaErr.CaptchaTs, captchaErr.CaptchaAttempt, token1)\n'
+        '\t\t\t\t}\n'
+        '\t\t\t\tif captchaErr.CaptchaSid != "" {\n'
+        '\t\t\t\t\tdata += "&captcha_sid=" + neturl.QueryEscape(captchaErr.CaptchaSid)\n'
+        '\t\t\t\t}\n'
+    )
+    source = replace_once(source, old_request, new_request, "optional captcha_sid retry parameter")
     path.write_text(source, encoding="utf-8")
 
 
@@ -324,6 +395,7 @@ def main() -> None:
     patch_main(client)
     patch_streams_per_credential(client)
     patch_manual_captcha(client)
+    patch_vk_captcha(client)
 
     templates = Path(__file__).resolve().parent
     for name in ("turn_socket_protect_android.go", "turn_socket_protect_other.go"):
