@@ -404,12 +404,19 @@ class XrayVpnService : VpnService() {
         turnProcess = null
         if (child != null) {
             TurnDiagnostics.record(this, "Остановка TURN-процесса")
-            TurnDiagnostics.setProcessState(this, false, null)
-        }
-        if (child != null) {
             runCatching { child.destroy() }
-            val exited = runCatching { child.waitFor(1, TimeUnit.SECONDS) }.getOrDefault(false)
-            if (!exited) runCatching { child.destroyForcibly() }
+            var exited = child.waitFor(1, TimeUnit.SECONDS)
+            if (!exited) {
+                TurnDiagnostics.record(this, "TURN-процесс не завершился штатно; принудительная остановка")
+                child.destroyForcibly()
+                // Do not release the listener/protection socket or allow a new
+                // TURN instance to start until the old process is truly gone.
+                child.waitFor()
+                exited = true
+            }
+            val exitCode = child.exitValue()
+            TurnDiagnostics.record(this, "TURN-процесс полностью остановлен (код: $exitCode)")
+            TurnDiagnostics.setProcessState(this, false, exitCode)
         }
 
         runCatching { turnSocketProtector?.close() }
