@@ -1,6 +1,8 @@
 package com.jpn.app
 
 import android.app.Activity
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -41,6 +43,9 @@ class TurnCaptchaActivity : Activity() {
             return
         }
 
+        // This activity runs in :captcha; process binding cannot affect JPN/Xray/TURN.
+        val physicalNetworkReady = bindProcessToPhysicalNetwork()
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -64,7 +69,11 @@ class TurnCaptchaActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(3)
         ))
         status = TextView(this).apply {
-            text = "Открой настоящую страницу VK и пройди проверку. После подтверждения подключение продолжится автоматически."
+            text = if (physicalNetworkReady) {
+                "Страница VK открывается напрямую через сеть телефона, в обход VPN. Пройди проверку — подключение продолжится автоматически."
+            } else {
+                "Не удалось найти физическую сеть с доступом в интернет. CAPTCHA не открыта, чтобы не отправлять её через VPN/TURN. Проверь Wi-Fi или мобильную сеть и повтори попытку."
+            }
             textSize = 13f
             setPadding(0, dp(8), 0, dp(8))
         }
@@ -110,8 +119,41 @@ class TurnCaptchaActivity : Activity() {
         ))
         setContentView(root)
         JpnTheme.apply(this, root)
-        browser.loadUrl(captchaUrl)
+        if (physicalNetworkReady) {
+            browser.loadUrl(captchaUrl)
+        } else {
+            progress?.visibility = View.GONE
+        }
     }
+
+    /**
+     * Selects a real Wi-Fi/mobile/Ethernet network, never the VPN transport.
+     * Process binding is isolated to this activity's dedicated :captcha process.
+     */
+    private fun bindProcessToPhysicalNetwork(): Boolean = runCatching {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val candidate = connectivity.allNetworks
+            .mapNotNull { network ->
+                val capabilities = connectivity.getNetworkCapabilities(network) ?: return@mapNotNull null
+                val physicalTransport =
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                if (!physicalTransport ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+                    !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                ) {
+                    null
+                } else {
+                    network to capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                }
+            }
+            .maxByOrNull { (_, validated) -> if (validated) 1 else 0 }
+            ?.first
+            ?: return@runCatching false
+
+        connectivity.bindProcessToNetwork(candidate)
+    }.getOrDefault(false)
 
     private fun installDocumentStartCapture(view: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -218,6 +260,8 @@ class TurnCaptchaActivity : Activity() {
             destroy()
         }
         webView = null
+        // Do not leave this short-lived process pinned to a stale physical network.
+        runCatching { getSystemService(ConnectivityManager::class.java).bindProcessToNetwork(null) }
         super.onDestroy()
     }
 
