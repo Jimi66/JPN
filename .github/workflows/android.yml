@@ -3,7 +3,7 @@ name: Android APK
 on:
   push:
     branches: [ "main", "mvp-vless-direct", "easter-egg-inline-video-20261118", "jpn-1.1.1-app-routing", "jpn-1.2.0-whis-turn" ]
-  workflow_dispatch:
+  workflow_dispatch: # Manual build for the selected JPN branch
 
 permissions:
   contents: read
