@@ -243,6 +243,61 @@ def patch_main(client: Path) -> None:
     path.write_text(source, encoding="utf-8")
 
 
+def patch_streams_per_credential(client: Path) -> None:
+    path = client / "main.go"
+    source = path.read_text(encoding="utf-8")
+
+    source = replace_once(
+        source,
+        'const (\n'
+        '\tcredentialLifetime = 10 * time.Minute\n'
+        '\tcacheSafetyMargin  = 60 * time.Second\n'
+        '\tmaxCacheErrors     = 3\n'
+        '\terrorWindow        = 10 * time.Second\n'
+        '\tstreamsPerCache    = 10\n'
+        ')\n'
+        '\n'
+        'func getCacheID(streamID int) int {',
+        'const (\n'
+        '\tcredentialLifetime = 10 * time.Minute\n'
+        '\tcacheSafetyMargin  = 60 * time.Second\n'
+        '\tmaxCacheErrors     = 3\n'
+        '\terrorWindow        = 10 * time.Second\n'
+        ')\n'
+        '\n'
+        '// Configurable number of TURN streams sharing one VK credential cache.\n'
+        'var streamsPerCache = 10\n'
+        '\n'
+        'func getCacheID(streamID int) int {',
+        "make streams-per-credential configurable",
+    )
+
+    source = replace_once(
+        source,
+        '\tn := flag.Int("n", 0, "connections to TURN (default 10 for VK, 1 for Yandex)")\n'
+        '\tudp := flag.Bool("udp", false, "connect to TURN with UDP")',
+        '\tn := flag.Int("n", 0, "connections to TURN (default 10 for VK, 1 for Yandex)")\n'
+        '\tstreamsPerCredential := flag.Int("streams-per-cred", 10, "TURN streams sharing one VK credential cache")\n'
+        '\tudp := flag.Bool("udp", false, "connect to TURN with UDP")',
+        "add streams-per-cred CLI flag",
+    )
+
+    source = replace_once(
+        source,
+        '\tflag.Parse()\n'
+        '\tif *peerAddr == "" {',
+        '\tflag.Parse()\n'
+        '\tif *streamsPerCredential < 1 {\n'
+        '\t\tlog.Panicf("streams-per-cred must be at least 1")\n'
+        '\t}\n'
+        '\tstreamsPerCache = *streamsPerCredential\n'
+        '\tif *peerAddr == "" {',
+        "apply streams-per-cred setting",
+    )
+
+    path.write_text(source, encoding="utf-8")
+
+
 def patch_manual_captcha(client: Path) -> None:
     path = client / "manual_captcha.go"
     source = path.read_text(encoding="utf-8")
@@ -267,6 +322,7 @@ def main() -> None:
         raise SystemExit(f"not a vk-turn-proxy client directory: {client}")
 
     patch_main(client)
+    patch_streams_per_credential(client)
     patch_manual_captcha(client)
 
     templates = Path(__file__).resolve().parent
