@@ -20,6 +20,7 @@ class TurnSettingsActivity : Activity() {
     private lateinit var vkLinkInput: EditText
     private lateinit var portInput: EditText
     private lateinit var threadsInput: EditText
+    private lateinit var streamsInput: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +82,10 @@ class TurnSettingsActivity : Activity() {
             prefs.getString(KEY_THREADS, "12") ?: "12",
             InputType.TYPE_CLASS_NUMBER)
 
+        streamsInput = addField(root, "Потоков на одну учётную запись",
+            prefs.getString(KEY_STREAMS_PER_CRED, "12") ?: "12",
+            InputType.TYPE_CLASS_NUMBER)
+
         root.addView(TextView(this).apply {
             text = "На первом этапе реализован UDP-режим. Для подключения выбери в JPN WireGuard-профиль. Локальный адрес будет 127.0.0.1, порт задаётся выше."
             textSize = 12f
@@ -127,6 +132,7 @@ class TurnSettingsActivity : Activity() {
         val vkLink = vkLinkInput.text.toString().trim()
         val port = portInput.text.toString().trim().toIntOrNull()
         val threads = threadsInput.text.toString().trim().toIntOrNull()
+        val streams = streamsInput.text.toString().trim().toIntOrNull()
         val enabled = enabledSwitch.isChecked
 
         if (enabled && peer.isBlank()) {
@@ -145,6 +151,10 @@ class TurnSettingsActivity : Activity() {
             threadsInput.error = "Количество потоков: от 1 до 64"
             return
         }
+        if (streams == null || streams !in 1..64) {
+            streamsInput.error = "Потоков на учётную запись: от 1 до 64"
+            return
+        }
 
         getSharedPreferences("jpn_settings", MODE_PRIVATE).edit()
             .putBoolean(KEY_ENABLED, enabled)
@@ -152,6 +162,7 @@ class TurnSettingsActivity : Activity() {
             .putString(KEY_VK_LINK, vkLink)
             .putString(KEY_LOCAL_PORT, port.toString())
             .putString(KEY_THREADS, threads.toString())
+            .putString(KEY_STREAMS_PER_CRED, streams.toString())
             .apply()
 
         Toast.makeText(this, "Настройки TURN сохранены", Toast.LENGTH_SHORT).show()
@@ -168,5 +179,6 @@ class TurnSettingsActivity : Activity() {
         const val KEY_VK_LINK = "turn_vk_link"
         const val KEY_LOCAL_PORT = "turn_local_port"
         const val KEY_THREADS = "turn_threads"
+        const val KEY_STREAMS_PER_CRED = "turn_streams_per_cred"
     }
 }
