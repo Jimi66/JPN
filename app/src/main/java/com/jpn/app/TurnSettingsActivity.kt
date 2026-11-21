@@ -118,7 +118,7 @@ class TurnSettingsActivity : Activity() {
         })
         return EditText(this).apply {
             this.inputType = inputType
-            singleLine = true
+            setSingleLine(true)
             setText(value)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             parent.addView(this, LinearLayout.LayoutParams(
