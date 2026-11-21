@@ -93,7 +93,7 @@ class TurnSettingsActivity : Activity() {
             InputType.TYPE_CLASS_NUMBER)
 
         root.addView(TextView(this).apply {
-            text = "На первом этапе реализован UDP-режим. Для подключения выбери в JPN WireGuard-профиль. Локальный адрес будет 127.0.0.1, порт задаётся выше. Обработка капчи VK через WebView добавляется отдельным этапом."
+            text = "На первом этапе реализован UDP-режим. Для подключения выбери в JPN WireGuard-профиль. Локальный адрес будет 127.0.0.1, порт задаётся выше. При запросе VK CAPTCHA JPN покажет отдельное уведомление. Нажми его, чтобы открыть встроенный WebView."
             textSize = 12f
             setPadding(0, dp(10), 0, dp(18))
         })
