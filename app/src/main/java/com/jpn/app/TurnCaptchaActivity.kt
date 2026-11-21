@@ -2,6 +2,7 @@ package com.jpn.app
 
 import android.app.Activity
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
@@ -17,19 +18,31 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.jpn.app.vpn.XrayVpnService
-import java.net.HttpURLConnection
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.net.URL
+import java.net.HttpURLConnection
 import java.net.URLEncoder
+import java.util.concurrent.Executor
+import kotlin.concurrent.thread
 
-/** Loads the real VK ID CAPTCHA page and returns its success token to the waiting TURN core. */
+/** Loads VK CAPTCHA through a local CONNECT proxy whose upstream sockets use the physical network. */
 class TurnCaptchaActivity : Activity() {
     private var webView: WebView? = null
     private var progress: ProgressBar? = null
     private var status: TextView? = null
+    private var connectProxy: CaptchaConnectProxy? = null
     @Volatile private var tokenSubmitted = false
+    private val directExecutor = Executor { command -> command.run() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,8 +56,14 @@ class TurnCaptchaActivity : Activity() {
             return
         }
 
-        // This activity runs in :captcha; process binding cannot affect JPN/Xray/TURN.
-        val physicalNetworkReady = bindProcessToPhysicalNetwork()
+        val physicalNetwork = findPhysicalNetwork()
+        val proxyPort = physicalNetwork?.let { network ->
+            runCatching {
+                CaptchaConnectProxy(network).also { connectProxy = it }.start()
+            }.getOrNull()
+        }
+        val canProxy = proxyPort != null &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -69,10 +88,15 @@ class TurnCaptchaActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(3)
         ))
         status = TextView(this).apply {
-            text = if (physicalNetworkReady) {
-                "Страница VK открывается напрямую через сеть телефона, в обход VPN. Пройди проверку — подключение продолжится автоматически."
-            } else {
-                "Не удалось найти физическую сеть с доступом в интернет. CAPTCHA не открыта, чтобы не отправлять её через VPN/TURN. Проверь Wi-Fi или мобильную сеть и повтори попытку."
+            text = when {
+                physicalNetwork == null ->
+                    "Не найдена физическая сеть с доступом в интернет. CAPTCHA не открыта, чтобы не отправлять её через VPN."
+                proxyPort == null ->
+                    "Не удалось запустить локальный сетевой прокси. CAPTCHA не открыта."
+                !canProxy ->
+                    "Текущая версия Android System WebView не поддерживает настройку прокси. Обнови Android System WebView."
+                else ->
+                    "VK CAPTCHA загружается через локальный прокси и физическую сеть телефона, в обход JPN VPN."
             }
             textSize = 13f
             setPadding(0, dp(8), 0, dp(8))
@@ -101,7 +125,7 @@ class TurnCaptchaActivity : Activity() {
         browser.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: android.graphics.Bitmap?) {
                 progress?.visibility = View.VISIBLE
-                status?.text = "Загружается страница VK ID…"
+                status?.text = "Загружается страница VK ID через физическую сеть…"
             }
 
             override fun onPageFinished(view: WebView?, pageUrl: String?) {
@@ -119,20 +143,27 @@ class TurnCaptchaActivity : Activity() {
         ))
         setContentView(root)
         JpnTheme.apply(this, root)
-        if (physicalNetworkReady) {
-            browser.loadUrl(captchaUrl)
+
+        if (canProxy) {
+            val config = ProxyConfig.Builder()
+                .addProxyRule("127.0.0.1:$proxyPort")
+                .addBypassRule("localhost")
+                .build()
+            ProxyController.getInstance().setProxyOverride(config, directExecutor, Runnable {
+                if (!isFinishing && !isDestroyed) {
+                    status?.text = "Локальный прокси готов. Загружаю VK CAPTCHA напрямую через сеть телефона…"
+                    browser.loadUrl(captchaUrl)
+                }
+            })
         } else {
             progress?.visibility = View.GONE
         }
     }
 
-    /**
-     * Selects a real Wi-Fi/mobile/Ethernet network, never the VPN transport.
-     * Process binding is isolated to this activity's dedicated :captcha process.
-     */
-    private fun bindProcessToPhysicalNetwork(): Boolean = runCatching {
+    /** Selects a validated physical network. All external proxy sockets are explicitly created on it. */
+    private fun findPhysicalNetwork(): Network? = runCatching {
         val connectivity = getSystemService(ConnectivityManager::class.java)
-        val candidate = connectivity.allNetworks
+        connectivity.allNetworks
             .mapNotNull { network ->
                 val capabilities = connectivity.getNetworkCapabilities(network) ?: return@mapNotNull null
                 val physicalTransport =
@@ -142,18 +173,133 @@ class TurnCaptchaActivity : Activity() {
                 if (!physicalTransport ||
                     capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
                     !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                ) {
-                    null
-                } else {
-                    network to capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                }
+                ) null
+                else network to capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             }
             .maxByOrNull { (_, validated) -> if (validated) 1 else 0 }
             ?.first
-            ?: return@runCatching false
+    }.getOrNull()
 
-        connectivity.bindProcessToNetwork(candidate)
-    }.getOrDefault(false)
+    /**
+     * A loopback-only HTTP CONNECT proxy. It never decrypts TLS: it opens the upstream
+     * TCP socket using the selected Network's SocketFactory and relays encrypted bytes.
+     */
+    private class CaptchaConnectProxy(private val network: Network) {
+        private val server = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        @Volatile private var running = true
+        val port: Int get() = server.localPort
+
+        fun start(): Int {
+            thread(name = "JPN-CAPTCHA-Proxy", isDaemon = true) {
+                while (running) {
+                    val client = try { server.accept() } catch (_: Exception) { break }
+                    thread(name = "JPN-CAPTCHA-Connect", isDaemon = true) {
+                        handle(client)
+                    }
+                }
+            }
+            return port
+        }
+
+        private fun handle(client: Socket) {
+            client.use { local ->
+                local.soTimeout = 20000
+                val header = readHeader(local.getInputStream()) ?: return
+                local.soTimeout = 0
+                val requestLine = header.substringBefore("\r\n")
+                val parts = requestLine.split(' ')
+                if (parts.size < 2 || parts[0] != "CONNECT") {
+                    local.getOutputStream().write("HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n".toByteArray())
+                    return
+                }
+                val authority = parts[1]
+                val split = authority.lastIndexOf(':')
+                if (split <= 0) {
+                    local.getOutputStream().write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".toByteArray())
+                    return
+                }
+                val host = authority.substring(0, split).trim('[', ']').lowercase()
+                val port = authority.substring(split + 1).toIntOrNull()
+                if (port != 443 || !isAllowedHost(host)) {
+                    local.getOutputStream().write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n".toByteArray())
+                    return
+                }
+
+                val upstream = try {
+                    val addresses = network.getAllByName(host)
+                    var connected: Socket? = null
+                    for (address in addresses) {
+                        val candidate = network.socketFactory.createSocket()
+                        try {
+                            candidate.connect(InetSocketAddress(address, port), 15000)
+                            connected = candidate
+                            break
+                        } catch (_: Exception) {
+                            runCatching { candidate.close() }
+                        }
+                    }
+                    connected ?: return
+                } catch (_: Exception) {
+                    local.getOutputStream().write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n".toByteArray())
+                    return
+                }
+
+                upstream.use { remote ->
+                    remote.soTimeout = 0
+                    local.getOutputStream().write("HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray())
+                    val upstreamToClient = thread(name = "JPN-CAPTCHA-Up", isDaemon = true) {
+                        relay(remote.getInputStream(), local)
+                    }
+                    relay(local.getInputStream(), remote)
+                    runCatching { remote.shutdownOutput() }
+                    runCatching { upstreamToClient.join(30000) }
+                }
+            }
+        }
+
+        private fun readHeader(input: InputStream): String? {
+            val bytes = ByteArrayOutputStream()
+            var matched = 0
+            val ending = byteArrayOf(13, 10, 13, 10)
+            while (bytes.size() < 32768) {
+                val value = input.read()
+                if (value < 0) return null
+                bytes.write(value)
+                if (value.toByte() == ending[matched]) {
+                    matched++
+                    if (matched == ending.size) return bytes.toString(Charsets.ISO_8859_1.name())
+                } else {
+                    matched = if (value == 13) 1 else 0
+                }
+            }
+            return null
+        }
+
+        private fun relay(input: InputStream, destination: Socket) {
+            try {
+                val output = destination.getOutputStream()
+                val buffer = ByteArray(16384)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    output.write(buffer, 0, count)
+                    output.flush()
+                }
+            } catch (_: Exception) {
+            } finally {
+                runCatching { destination.shutdownOutput() }
+            }
+        }
+
+        private fun isAllowedHost(host: String): Boolean =
+            host == "id.vk.ru" || host == "id.vk.com" ||
+                host.endsWith(".vk.ru") || host.endsWith(".vk.com")
+
+        fun stop() {
+            running = false
+            runCatching { server.close() }
+        }
+    }
 
     private fun installDocumentStartCapture(view: WebView) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -260,8 +406,13 @@ class TurnCaptchaActivity : Activity() {
             destroy()
         }
         webView = null
-        // Do not leave this short-lived process pinned to a stale physical network.
-        runCatching { getSystemService(ConnectivityManager::class.java).bindProcessToNetwork(null) }
+        connectProxy?.stop()
+        connectProxy = null
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            runCatching {
+                ProxyController.getInstance().clearProxyOverride(directExecutor, Runnable {})
+            }
+        }
         super.onDestroy()
     }
 
