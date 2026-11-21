@@ -339,7 +339,14 @@ def patch_android_captcha_url(client: Path) -> None:
         '\tif runtime.GOOS != "android" {\n'
         '\t\topenBrowser(captchaURL)\n'
         '\t}',
-        '\\tif runtime.GOOS == "android" && androidURL != "" {\\n\\t\\tfmt.Println("JPN_CAPTCHA_URL=" + androidURL)\\n\\t} else {\\n\\t\\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\\n\\t}\\n\\tif runtime.GOOS != "android" {\\n\\t\\topenBrowser(captchaURL)\\n\\t}',
+        '\tif runtime.GOOS == "android" && androidURL != "" {\n'
+        '\t\tfmt.Println("JPN_CAPTCHA_URL=" + androidURL)\n'
+        '\t} else {\n'
+        '\t\tfmt.Println("JPN_CAPTCHA_URL=" + captchaURL)\n'
+        '\t}\n'
+        '\tif runtime.GOOS != "android" {\n'
+        '\t\topenBrowser(captchaURL)\n'
+        '\t}',
         "open original VK CAPTCHA in Android WebView",
     )
     source = replace_once(
