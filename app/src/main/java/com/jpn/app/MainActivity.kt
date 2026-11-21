@@ -1539,6 +1539,9 @@ class MainActivity : Activity() {
             val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "12")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
                 ?: throw IllegalArgumentException("Проверь количество потоков в настройках TURN")
+            val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "12")
+                ?.toIntOrNull()?.takeIf { it in 1..64 }
+                ?: throw IllegalArgumentException("Проверь число потоков на учётную запись в настройках TURN")
             if (turnPeer.isBlank() || vkLink.isBlank()) {
                 throw IllegalArgumentException("Заполни адрес TURN-сервера и ссылку VK Calls в настройках TURN")
             }
@@ -1555,6 +1558,7 @@ class MainActivity : Activity() {
                 .put("vkLink", vkLink)
                 .put("listen", "127.0.0.1:$localPort")
                 .put("threads", threads)
+                .put("streamsPerCredential", streamsPerCredential)
         } else {
             null
         }
