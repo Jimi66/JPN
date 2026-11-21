@@ -2,7 +2,6 @@ package com.jpn.app.vpn
 
 import android.net.LocalServerSocket
 import android.net.LocalSocket
-import android.net.LocalSocketAddress
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.os.Process
@@ -37,9 +36,7 @@ internal class TurnSocketProtector(
         check(!closed.get()) { "TURN socket protector is closed" }
         if (server != null) return
 
-        val localServer = LocalServerSocket(
-            LocalSocketAddress(SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT)
-        )
+        val localServer = LocalServerSocket(SOCKET_NAME)
         server = localServer
 
         acceptThread = Thread({
