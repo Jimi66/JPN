@@ -37,6 +37,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            keepDebugSymbols += "**/libvkturn.so"
         }
     }
 }
