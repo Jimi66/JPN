@@ -23,10 +23,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Go
+      - name: Set up Go for TURN core
         uses: actions/setup-go@v5
         with:
-          go-version: "1.27.3"
+          go-version: "1.25.5"
           cache: false
 
       - name: Set up Python
@@ -85,6 +85,12 @@ jobs:
           git clone https://github.com/XTLS/libXray.git
           cd libXray
           git checkout 5a0f7d8d1c28b34afb5727b04b26a10f6dbac7e3
+
+      - name: Set up Go for libXray
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+          cache: false
 
       - name: Cache Go modules and build cache
         uses: actions/cache@v4
