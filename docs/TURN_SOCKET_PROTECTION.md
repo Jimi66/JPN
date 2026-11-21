@@ -69,7 +69,8 @@ by `ProcessBuilder` from the app's native-library directory.
 ## Status
 
 - Android FD-receive/protect bridge added to the JPN experimental branch.
-- Go-side IPC helper templates added.
+- Go-side IPC helper templates and a repeatable core patch script added.
+- The patch script has not yet been applied to a checked-out Go core or compiled.
 - The upstream Go core is not yet patched to use the helper.
 - No TURN binary is bundled yet.
 - No build or device-level socket-protection test has been run.
