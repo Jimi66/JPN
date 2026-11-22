@@ -98,14 +98,19 @@ class SettingsMenuActivity : Activity() {
             startActivity(Intent(this, SiteRoutingActivity::class.java))
         }
         addDivider(tunItems, borderColor)
-        addSubItem(tunItems, "Ссылка VK Call", textColor, secondaryColor) {
-            startActivity(Intent(this, TurnSettingsActivity::class.java))
-        }
-        addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Автообновление", textColor, secondaryColor) {
             startActivity(Intent(this, AutoUpdateMenuActivity::class.java))
         }
         content.addView(tunItems, sectionParams())
+
+        content.addView(sectionTitle("Настройки TURN режима", textColor).apply {
+            setPadding(0, dp(18), 0, dp(10))
+        })
+        val turnItems = sectionCard(cardColor, borderColor)
+        addSubItem(turnItems, "Ссылка VK Call", textColor, secondaryColor) {
+            startActivity(Intent(this, TurnSettingsActivity::class.java))
+        }
+        content.addView(turnItems, sectionParams())
 
         // Keep the discreet credits and the seven-tap video easter egg
         // at the bottom of the settings screen.
