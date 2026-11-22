@@ -1752,7 +1752,7 @@ class MainActivity : Activity() {
             val localPort = turnPrefs.getString(TurnSettingsActivity.KEY_LOCAL_PORT, "9000")
                 ?.toIntOrNull()?.takeIf { it in 1024..65535 }
                 ?: throw IllegalArgumentException("Некорректный локальный UDP-порт TURN")
-            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "20")
+            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "40")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
                 ?: throw IllegalArgumentException("Проверь количество потоков TURN")
             val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "20")

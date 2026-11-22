@@ -270,7 +270,7 @@ class XrayVpnService : VpnService() {
         }
         val statusMessage = when {
             testMode -> "Тестовый туннель подключён"
-            turnConfig != null -> "TURN-клиент запущен, ожидаю соединение"
+            turnConfig != null -> "Надо подтвердить две каптчи"
             else -> "VPN подключён"
         }
         publishState(if (turnConfig != null && !testMode) "connecting" else "connected", statusMessage, testMode)
@@ -281,7 +281,7 @@ class XrayVpnService : VpnService() {
         val peer = turnConfig.optString("peer").trim()
         val vkLink = turnConfig.optString("vkLink").trim()
         val listen = turnConfig.optString("listen", "127.0.0.1:9000").trim()
-        val threads = turnConfig.optInt("threads", 20).coerceIn(1, 64)
+        val threads = turnConfig.optInt("threads", 40).coerceIn(1, 64)
         val streamsPerCredential = turnConfig.optInt("streamsPerCredential", 20).coerceIn(1, 64)
         if (peer.isBlank() || vkLink.isBlank()) {
             throw IllegalStateException("Не заполнены адрес TURN-сервера и ссылка VK Calls")
