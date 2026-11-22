@@ -176,11 +176,12 @@ class XrayVpnService : VpnService() {
             .addAddress("fdfe:dcba:9876::1", 126)
             .addRoute("::", 0)
 
-        // Diagnostic ping mode is intentionally limited to JPN itself.
-        // Normal VPN sessions may use Android-level per-app tunneling.
+        // Per-app routing belongs only to ordinary TUN/VLESS sessions.
+        // TURN/WireGuard must always use its own full-tunnel behavior and must
+        // not inherit the app allow-/block-list configured for TUN mode.
         if (testMode) {
             builder.addAllowedApplication(packageName)
-        } else {
+        } else if (turnConfig == null) {
             val prefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
             if (prefs.getBoolean("routing_enabled", false)) {
                 val mode = prefs.getString("routing_mode", "selected") ?: "selected"
