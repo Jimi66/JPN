@@ -786,8 +786,8 @@ class MainActivity : Activity() {
 
     private fun sectionTitle(value: String) = TextView(this).apply {
         text = value
-        textSize = 19f
-        setPadding(0, dp(12), 0, dp(4))
+        textSize = 16f
+        setPadding(dp(12), dp(12), 0, dp(4))
     }
 
     private fun loadSubscription() {
