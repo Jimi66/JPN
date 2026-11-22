@@ -2034,7 +2034,7 @@ class MainActivity : Activity() {
         if (!isTurnProxyRunning()) return false
         android.widget.Toast.makeText(
             this,
-            "Подключено к серверу для обхода белых списков. Сначала отключись от него",
+            "Сначала отключи TURN",
             android.widget.Toast.LENGTH_LONG
         ).show()
         return true
