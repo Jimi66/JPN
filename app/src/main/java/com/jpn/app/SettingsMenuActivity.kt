@@ -98,7 +98,7 @@ class SettingsMenuActivity : Activity() {
             startActivity(Intent(this, SiteRoutingActivity::class.java))
         }
         addDivider(tunItems, borderColor)
-        addSubItem(tunItems, "TURN-клиент", textColor, secondaryColor) {
+        addSubItem(tunItems, "Ссылка VK Call", textColor, secondaryColor) {
             startActivity(Intent(this, TurnSettingsActivity::class.java))
         }
         addDivider(tunItems, borderColor)

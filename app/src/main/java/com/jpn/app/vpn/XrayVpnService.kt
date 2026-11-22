@@ -281,8 +281,8 @@ class XrayVpnService : VpnService() {
         val peer = turnConfig.optString("peer").trim()
         val vkLink = turnConfig.optString("vkLink").trim()
         val listen = turnConfig.optString("listen", "127.0.0.1:9000").trim()
-        val threads = turnConfig.optInt("threads", 12).coerceIn(1, 64)
-        val streamsPerCredential = turnConfig.optInt("streamsPerCredential", 12).coerceIn(1, 64)
+        val threads = turnConfig.optInt("threads", 20).coerceIn(1, 64)
+        val streamsPerCredential = turnConfig.optInt("streamsPerCredential", 20).coerceIn(1, 64)
         if (peer.isBlank() || vkLink.isBlank()) {
             throw IllegalStateException("Не заполнены адрес TURN-сервера и ссылка VK Calls")
         }

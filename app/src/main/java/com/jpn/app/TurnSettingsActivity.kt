@@ -1,27 +1,19 @@
 package com.jpn.app
 
 import android.app.Activity
-import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
-import android.view.View
+import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
 class TurnSettingsActivity : Activity() {
 
-    private lateinit var enabledSwitch: Switch
-    private lateinit var peerInput: EditText
     private lateinit var vkLinkInput: EditText
-    private lateinit var portInput: EditText
-    private lateinit var threadsInput: EditText
-    private lateinit var streamsInput: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,157 +39,52 @@ class TurnSettingsActivity : Activity() {
         })
 
         root.addView(TextView(this).apply {
-            text = "TURN-клиент"
+            text = "Ссылка VK Call"
             textSize = 22f
-            setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(14))
         })
 
-        enabledSwitch = Switch(this).apply {
-            text = "Использовать TURN для WireGuard"
-            textSize = 16f
-            isChecked = prefs.getBoolean(KEY_ENABLED, false)
-            setPadding(dp(4), dp(10), dp(4), dp(10))
+        root.addView(TextView(this).apply {
+            text = "Ссылка VK Call"
+            textSize = 14f
+            setPadding(0, dp(8), 0, dp(5))
+        })
+        vkLinkInput = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            hint = "Вставь ссылку VK Call"
+            setText(prefs.getString(KEY_VK_LINK, "").orEmpty())
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        root.addView(enabledSwitch)
+        root.addView(vkLinkInput, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
 
-        root.addView(TextView(this).apply {
-            text = "TURN-клиент будет принимать WireGuard UDP-трафик локально и передавать его через VK Calls на твой TURN-сервер. При запросе CAPTCHA JPN откроет встроенный экран браузера внутри приложения. Остальные типы серверов JPN не затрагиваются."
-            textSize = 13f
-            setPadding(0, dp(2), 0, dp(14))
-        })
-
-        peerInput = addField(root, "Адрес TURN-сервера (host:port)",
-            prefs.getString(KEY_PEER, "").orEmpty(),
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-
-        vkLinkInput = addField(root, "Ссылка VK Calls",
-            prefs.getString(KEY_VK_LINK, "").orEmpty(),
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-
-        portInput = addField(root, "Локальный UDP-порт",
-            prefs.getString(KEY_LOCAL_PORT, "9000") ?: "9000",
-            InputType.TYPE_CLASS_NUMBER)
-
-        threadsInput = addField(root, "Количество потоков",
-            prefs.getString(KEY_THREADS, "12") ?: "12",
-            InputType.TYPE_CLASS_NUMBER)
-
-        streamsInput = addField(root, "Потоков на одну учётную запись",
-            prefs.getString(KEY_STREAMS_PER_CRED, "12") ?: "12",
-            InputType.TYPE_CLASS_NUMBER)
-
-        root.addView(TextView(this).apply {
-            text = "Если CAPTCHA появится, когда JPN свёрнут, открой JPN через значок приложения или постоянное VPN-уведомление — проверка откроется внутри приложения. Дополнительные разрешения не требуются."
-            textSize = 12f
-            setPadding(0, dp(10), 0, dp(18))
-        })
-
-        val save = Button(this).apply {
+        root.addView(Button(this).apply {
             text = "Сохранить"
             setOnClickListener { saveSettings() }
-        }
-        root.addView(save, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ))
-
-        root.addView(TextView(this).apply {
-            text = "Диагностика TURN"
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(22), 0, dp(6))
-        })
-        root.addView(TextView(this).apply {
-            text = "Журнал запуска и соединения поможет определить, на каком этапе останавливается подключение."
-            textSize = 13f
-            setPadding(0, 0, 0, dp(8))
-        })
-        root.addView(Button(this).apply {
-            text = "Открыть журнал диагностики"
-            setOnClickListener {
-                startActivity(Intent(this@TurnSettingsActivity, TurnDiagnosticsActivity::class.java))
-            }
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ))
+        ).apply { topMargin = dp(18) })
 
         val scroll = ScrollView(this).apply { addView(root) }
         setContentView(scroll)
         JpnTheme.apply(this, scroll)
     }
 
-    private fun addField(
-        parent: LinearLayout,
-        label: String,
-        value: String,
-        inputType: Int
-    ): EditText {
-        parent.addView(TextView(this).apply {
-            text = label
-            textSize = 14f
-            setPadding(0, dp(8), 0, dp(5))
-        })
-        return EditText(this).apply {
-            this.inputType = inputType
-            setSingleLine(true)
-            setText(value)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            parent.addView(this, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ))
-        }
-    }
-
     private fun saveSettings() {
-        val peer = peerInput.text.toString().trim()
-        val vkLink = vkLinkInput.text.toString().trim()
-        val port = portInput.text.toString().trim().toIntOrNull()
-        val threads = threadsInput.text.toString().trim().toIntOrNull()
-        val streams = streamsInput.text.toString().trim().toIntOrNull()
-        val enabled = enabledSwitch.isChecked
-
-        if (enabled && peer.isBlank()) {
-            peerInput.error = "Укажи адрес TURN-сервера"
+        val link = vkLinkInput.text.toString().trim()
+        if (link.isNotEmpty() &&
+            !link.startsWith("https://", true) &&
+            !link.startsWith("http://", true)
+        ) {
+            vkLinkInput.error = "Укажи корректную ссылку VK Call"
             return
         }
-        if (enabled && (!vkLink.startsWith("https://") && !vkLink.startsWith("http://"))) {
-            vkLinkInput.error = "Укажи ссылку VK Calls"
-            return
-        }
-        if (port == null || port !in 1024..65535) {
-            portInput.error = "Порт должен быть от 1024 до 65535"
-            return
-        }
-        if (threads == null || threads !in 1..64) {
-            threadsInput.error = "Количество потоков: от 1 до 64"
-            return
-        }
-        if (streams == null || streams !in 1..64) {
-            streamsInput.error = "Потоков на учётную запись: от 1 до 64"
-            return
-        }
-
-        persistSettings(enabled, peer, vkLink, port, threads, streams)
-    }
-
-    private fun persistSettings(
-        enabled: Boolean,
-        peer: String,
-        vkLink: String,
-        port: Int,
-        threads: Int,
-        streams: Int
-    ) {
         getSharedPreferences("jpn_settings", MODE_PRIVATE).edit()
-            .putBoolean(KEY_ENABLED, enabled)
-            .putString(KEY_PEER, peer)
-            .putString(KEY_VK_LINK, vkLink)
-            .putString(KEY_LOCAL_PORT, port.toString())
-            .putString(KEY_THREADS, threads.toString())
-            .putString(KEY_STREAMS_PER_CRED, streams.toString())
+            .putString(KEY_VK_LINK, link)
             .apply()
-
-        Toast.makeText(this, "Настройки TURN сохранены", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Ссылка VK Call сохранена", Toast.LENGTH_LONG).show()
         setResult(RESULT_OK)
         finish()
     }
@@ -206,6 +93,7 @@ class TurnSettingsActivity : Activity() {
         (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        // Retained preference keys keep existing TURN configuration compatible.
         const val KEY_ENABLED = "turn_enabled"
         const val KEY_PEER = "turn_peer"
         const val KEY_VK_LINK = "turn_vk_link"

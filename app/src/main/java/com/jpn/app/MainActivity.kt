@@ -379,6 +379,7 @@ class MainActivity : Activity() {
             return
         }
         updateManagementButtonsState()
+        if (::wireGuardNodesContainer.isInitialized) renderNodes()
         openPendingTurnCaptcha()
         applyPendingSiteRoutingRestart()
     }
@@ -679,6 +680,11 @@ class MainActivity : Activity() {
                 choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
                 setOnItemClickListener { _, _, position, _ ->
                     val globalIndex = wireGuardNodeIndices.getOrNull(position) ?: return@setOnItemClickListener
+                    val node = nodes.getOrNull(globalIndex) ?: return@setOnItemClickListener
+                    if (!hasVkCallLink()) {
+                        showMissingVkCallLinkMessage()
+                        return@setOnItemClickListener
+                    }
                     selectNodeAt(globalIndex)
                 }
                 setOnTouchListener { view, event ->
@@ -1587,6 +1593,7 @@ class MainActivity : Activity() {
         nodesContainer.visibility = if (ordinaryNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         wireGuardNodesHeader.visibility = if (wireGuardNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         wireGuardNodesContainer.visibility = if (wireGuardNodeIndices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        wireGuardNodesContainer.alpha = if (hasVkCallLink()) 1f else 0.45f
         if (::addSubscriptionButton.isInitialized) {
             addSubscriptionButton.visibility = if (nodes.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
         }
@@ -1643,6 +1650,11 @@ class MainActivity : Activity() {
             }.start()
             return
         }
+        if (outbound.optString("protocol").equals("wireguard", ignoreCase = true) && !hasVkCallLink()) {
+            showMissingVkCallLinkMessage()
+            return
+        }
+
         getSharedPreferences("jpn_settings", MODE_PRIVATE)
             .edit()
             .putString("vpn_server_name", name)
@@ -1680,6 +1692,41 @@ class MainActivity : Activity() {
         }.start()
     }
 
+
+    private fun hasVkCallLink(): Boolean =
+        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+            .getString(TurnSettingsActivity.KEY_VK_LINK, "")
+            .orEmpty().trim().isNotEmpty()
+
+    private fun showMissingVkCallLinkMessage() {
+        val message = "Чтобы заработало, добавь линк ВК"
+        setStatus(message)
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    private fun turnPeerAddressFromWireGuard(outbound: JSONObject): String {
+        val peers = outbound.optJSONObject("settings")?.optJSONArray("peers")
+            ?: throw IllegalArgumentException("В WireGuard-профиле не найдены настройки Peer")
+        if (peers.length() != 1) {
+            throw IllegalArgumentException("TURN поддерживает WireGuard-профиль только с одним Peer")
+        }
+        val endpoint = peers.optJSONObject(0)?.optString("endpoint").orEmpty().trim()
+        if (endpoint.isBlank()) {
+            throw IllegalArgumentException("В WireGuard-профиле не указан Endpoint")
+        }
+        val host = if (endpoint.startsWith("[")) {
+            endpoint.substringAfter("[", "").substringBefore("]", "")
+        } else {
+            endpoint.substringBeforeLast(":", "")
+        }.trim()
+        val port = endpoint.substringAfterLast(":", "").toIntOrNull()
+        if (host.isBlank() || port == null || port !in 1..65535) {
+            throw IllegalArgumentException("Не удалось определить адрес WireGuard-сервера из Endpoint")
+        }
+        val formattedHost = if (host.contains(":")) "[$host]" else host
+        return "$formattedHost:56000"
+    }
+
     private fun buildXrayConfig(selectedOutbound: JSONObject): String {
         val routingPreferences = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
         val directOutbound = JSONObject()
@@ -1696,28 +1743,23 @@ class MainActivity : Activity() {
         val turnPrefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
         val selectedIsWireGuard =
             selected.optString("protocol").equals("wireguard", ignoreCase = true)
-        val turnConfig = if (
-            turnPrefs.getBoolean(TurnSettingsActivity.KEY_ENABLED, false) && selectedIsWireGuard
-        ) {
-            val turnPeer = turnPrefs.getString(TurnSettingsActivity.KEY_PEER, "").orEmpty().trim()
+        val turnConfig = if (selectedIsWireGuard) {
             val vkLink = turnPrefs.getString(TurnSettingsActivity.KEY_VK_LINK, "").orEmpty().trim()
+            if (vkLink.isBlank()) {
+                throw IllegalArgumentException("Чтобы заработало, добавь линк ВК")
+            }
+            val turnPeer = turnPeerAddressFromWireGuard(selected)
             val localPort = turnPrefs.getString(TurnSettingsActivity.KEY_LOCAL_PORT, "9000")
                 ?.toIntOrNull()?.takeIf { it in 1024..65535 }
-                ?: throw IllegalArgumentException("Проверь локальный UDP-порт в настройках TURN")
-            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "12")
+                ?: throw IllegalArgumentException("Некорректный локальный UDP-порт TURN")
+            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "20")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
-                ?: throw IllegalArgumentException("Проверь количество потоков в настройках TURN")
-            val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "12")
+                ?: throw IllegalArgumentException("Проверь количество потоков TURN")
+            val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "20")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
-                ?: throw IllegalArgumentException("Проверь число потоков на учётную запись в настройках TURN")
-            if (turnPeer.isBlank() || vkLink.isBlank()) {
-                throw IllegalArgumentException("Заполни адрес TURN-сервера и ссылку VK Calls в настройках TURN")
-            }
+                ?: throw IllegalArgumentException("Проверь число потоков на учётную запись TURN")
             val peers = selected.optJSONObject("settings")?.optJSONArray("peers")
                 ?: throw IllegalArgumentException("В WireGuard-профиле не найдены настройки Peer")
-            if (peers.length() != 1) {
-                throw IllegalArgumentException("TURN пока поддерживает WireGuard-профиль с одним Peer")
-            }
             val wgPeer = peers.optJSONObject(0)
                 ?: throw IllegalArgumentException("Некорректный WireGuard Peer")
             wgPeer.put("endpoint", "127.0.0.1:$localPort")
