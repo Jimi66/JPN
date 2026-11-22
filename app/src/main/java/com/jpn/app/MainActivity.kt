@@ -148,7 +148,9 @@ class MainActivity : Activity() {
                 return
             }
             val message = intent.getStringExtra("message") ?: state
-            showState(state, message)
+            val turnConnections = intent.getIntExtra(XrayVpnService.EXTRA_TURN_CONNECTIONS, -1)
+            val turnLimit = intent.getIntExtra(XrayVpnService.EXTRA_TURN_CONNECTION_LIMIT, -1)
+            showState(state, formatTurnStatus(message, turnConnections, turnLimit))
             if (pingRestoreVpn && (state == "connected" || state == "error")) {
                 pingRestoreVpn = false
                 pingSuppressHaptics = false
@@ -1971,7 +1973,7 @@ class MainActivity : Activity() {
         val running = isVpnRunning()
         updateVpnButtonAppearance(running)
         if (running) {
-            setStatus("VPN подключён")
+            setStatus(formatTurnStatus("VPN подключён"))
         } else {
             val state = preferences.getString(KEY_VPN_STATE, "disconnected")
             val message = preferences.getString("vpn_message", "Отключено")
@@ -1993,6 +1995,18 @@ class MainActivity : Activity() {
             vibrateForVpnTransition()
             lastHapticVpnState = state
         }
+    }
+
+    private fun formatTurnStatus(
+        message: String,
+        connections: Int = -1,
+        limit: Int = -1
+    ): String {
+        val saved = preferences
+        val actualLimit = if (limit >= 0) limit else saved.getInt("turn_connection_limit", 0)
+        if (actualLimit <= 0) return message
+        val actualConnections = if (connections >= 0) connections else saved.getInt("turn_connections", 0)
+        return "$message · ${actualConnections.coerceIn(0, actualLimit)}/$actualLimit"
     }
 
     private fun vibrateForVpnTransition() {

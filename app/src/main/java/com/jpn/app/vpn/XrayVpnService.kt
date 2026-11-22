@@ -35,6 +35,8 @@ class XrayVpnService : VpnService() {
         const val EXTRA_XRAY_JSON = "xray_json"
         const val EXTRA_TEST_MODE = "test_mode"
         const val ACTION_STATE_CHANGED = "com.jpn.app.vpn.STATE_CHANGED"
+        const val EXTRA_TURN_CONNECTIONS = "turn_connections"
+        const val EXTRA_TURN_CONNECTION_LIMIT = "turn_connection_limit"
         const val EXTRA_CAPTCHA_URL = "captcha_url"
         const val ACTION_CAPTCHA_OPENED = "com.jpn.app.vpn.CAPTCHA_OPENED"
 
@@ -308,18 +310,43 @@ class XrayVpnService : VpnService() {
         builder.environment()["VK_PROFILE_PATH"] =
             File(filesDir, "vk_profile.json").absolutePath
 
+        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).edit()
+            .putInt("turn_connections", 0)
+            .putInt("turn_connection_limit", threads)
+            .apply()
         TurnDiagnostics.record(this, "Запуск Go TURN-процесса")
         val child = builder.start()
         turnProcess = child
         TurnDiagnostics.setProcessState(this, true, null)
 
         Thread({
+            var activeTurnConnections = 0
             runCatching {
                 child.inputStream.bufferedReader().useLines { output ->
                     output.forEach { line ->
                         Log.i("JPN-TURN", line)
                         TurnDiagnostics.record(this@XrayVpnService, line)
                         when {
+                            line.contains("Established DTLS connection", ignoreCase = true) -> {
+                                activeTurnConnections = (activeTurnConnections + 1).coerceAtMost(threads)
+                                val connectionCount = activeTurnConnections
+                                workerHandler.post {
+                                    if (turnProcess === child && coreStarted) {
+                                        publishTurnConnectionCount(connectionCount, threads)
+                                        updateVpnNotification("VPN-подключение активно")
+                                        publishState("connected", "VPN подключён через TURN")
+                                    }
+                                }
+                            }
+                            line.contains("Closed DTLS connection", ignoreCase = true) -> {
+                                activeTurnConnections = (activeTurnConnections - 1).coerceAtLeast(0)
+                                val connectionCount = activeTurnConnections
+                                workerHandler.post {
+                                    if (turnProcess === child && coreStarted) {
+                                        publishTurnConnectionCount(connectionCount, threads)
+                                    }
+                                }
+                            }
                             line.startsWith("JPN_CAPTCHA_URL=") -> {
                                 val captchaUrl = line.substringAfter("JPN_CAPTCHA_URL=").trim()
                                 workerHandler.post {
@@ -329,14 +356,6 @@ class XrayVpnService : VpnService() {
                                         if (opened) {
                                             TurnDiagnostics.record(this@XrayVpnService, "Окно CAPTCHA открыто поверх JPN")
                                         }
-                                    }
-                                }
-                            }
-                            line.contains("Established DTLS connection", ignoreCase = true) -> {
-                                workerHandler.post {
-                                    if (turnProcess === child && coreStarted) {
-                                        updateVpnNotification("VPN-подключение активно")
-                                        publishState("connected", "VPN подключён через TURN", testMode)
                                     }
                                 }
                             }
@@ -427,6 +446,10 @@ class XrayVpnService : VpnService() {
             TurnDiagnostics.setProcessState(this, false, exitCode)
         }
 
+        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).edit()
+            .putInt("turn_connections", 0)
+            .putInt("turn_connection_limit", 0)
+            .apply()
         runCatching { turnSocketProtector?.close() }
         turnSocketProtector = null
         runCatching { vpnInterface?.close() }
@@ -487,6 +510,23 @@ class XrayVpnService : VpnService() {
         }.getOrDefault(false)
     }
 
+    private fun publishTurnConnectionCount(connections: Int, limit: Int) {
+        val safeConnections = connections.coerceIn(0, limit.coerceAtLeast(0))
+        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).edit()
+            .putInt("turn_connections", safeConnections)
+            .putInt("turn_connection_limit", limit)
+            .apply()
+        sendBroadcast(
+            Intent(ACTION_STATE_CHANGED)
+                .setPackage(packageName)
+                .putExtra("state", "connected")
+                .putExtra("message", "VPN подключён через TURN")
+                .putExtra(EXTRA_TURN_CONNECTIONS, safeConnections)
+                .putExtra(EXTRA_TURN_CONNECTION_LIMIT, limit)
+                .putExtra(EXTRA_TEST_MODE, false)
+        )
+    }
+
     private fun publishState(state: String, message: String, isTestMode: Boolean = testMode) {
         if (!isTestMode) {
             getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
@@ -500,6 +540,8 @@ class XrayVpnService : VpnService() {
                 .setPackage(packageName)
                 .putExtra("state", state)
                 .putExtra("message", message)
+                .putExtra(EXTRA_TURN_CONNECTIONS, getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).getInt("turn_connections", 0))
+                .putExtra(EXTRA_TURN_CONNECTION_LIMIT, getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).getInt("turn_connection_limit", 0))
                 .putExtra(EXTRA_TEST_MODE, isTestMode)
         )
         if (!isTestMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
