@@ -22,6 +22,10 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
             Log.i(TAG, "Automatic subscription update is disabled")
             return Result.success()
         }
+        if (com.jpn.app.vpn.TurnDiagnostics.isProcessRunning(applicationContext)) {
+            Log.i(TAG, "Automatic subscription update deferred while TURN proxy is active")
+            return Result.retry()
+        }
         val address = prefs.getString("subscription_url", null)?.takeIf { it.isNotBlank() }
             ?: run {
                 Log.w(TAG, "Automatic subscription update skipped: subscription URL is missing")
@@ -67,6 +71,10 @@ class AutoSubscriptionWorker(context: Context, params: WorkerParameters) : Corou
                     bodyAnnouncement = decodeAnnouncement(lineText.substringAfter(":")); false
                 } else true
             }.joinToString("\n")
+            if (com.jpn.app.vpn.TurnDiagnostics.isProcessRunning(applicationContext)) {
+                Log.i(TAG, "Automatic subscription update deferred because TURN became active")
+                return Result.retry()
+            }
             val subscription = SubscriptionParser.decodeBody(cleaned)
             val nodes = SubscriptionParser.parseEntries(subscription, metadata)
             if (nodes.isEmpty()) throw IllegalStateException("No compatible servers in subscription")

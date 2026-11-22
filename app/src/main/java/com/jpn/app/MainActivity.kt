@@ -113,6 +113,8 @@ class MainActivity : Activity() {
     private lateinit var subscriptionAnnouncementView: TextView
     private lateinit var subscriptionTrafficView: TextView
     private lateinit var vpnButton: ImageButton
+    private lateinit var refreshSubscriptionButton: ImageButton
+    private lateinit var pingButton: ImageButton
     private lateinit var addSubscriptionButton: Button
     private var pendingXrayConfig: String? = null
     private var pendingSelectedOutbound: JSONObject? = null
@@ -374,6 +376,7 @@ class MainActivity : Activity() {
             recreate()
             return
         }
+        updateManagementButtonsState()
         openPendingTurnCaptcha()
         applyPendingSiteRoutingRestart()
     }
@@ -583,7 +586,7 @@ class MainActivity : Activity() {
                 popupWindow.showAsDropDown(anchor)
             }
         }
-        val refreshSubscriptionButton = ImageButton(this).apply {
+        refreshSubscriptionButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_subscription_refresh)
             applyMainIconTint(this)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
@@ -594,6 +597,7 @@ class MainActivity : Activity() {
             background = getDrawable(selectableBackground.resourceId)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             setOnClickListener {
+                if (blockManagementActionWhileTurn()) return@setOnClickListener
                 val savedUrl = preferences.getString(KEY_SUBSCRIPTION_URL, null)
                 if (savedUrl.isNullOrBlank()) {
                     setStatus("Нет сохранённой ссылки на подписку")
@@ -603,7 +607,7 @@ class MainActivity : Activity() {
                 }
             }
         }
-        val pingButton = ImageButton(this).apply {
+        pingButton = ImageButton(this).apply {
             setImageResource(R.drawable.jpn_ping_speedometer)
             applyMainIconTint(this)
             contentDescription = "Проверка серверов"
@@ -617,6 +621,7 @@ class MainActivity : Activity() {
             isClickable = true
             alpha = 1f
             setOnClickListener {
+                if (blockManagementActionWhileTurn()) return@setOnClickListener
                 checkServersLatency(this)
             }
         }
@@ -791,6 +796,7 @@ class MainActivity : Activity() {
     }
 
     private fun loadSubscription() {
+        if (blockManagementActionWhileTurn()) return
         val subscriptionUrl = subscriptionInput.text.toString().trim()
         val parsedUrl = runCatching { URL(subscriptionUrl) }.getOrNull()
         if (parsedUrl == null || parsedUrl.protocol != "https") {
@@ -1287,6 +1293,7 @@ class MainActivity : Activity() {
      * This follows Happ's proxy-delay check and does not create an Android VPN/TUN interface.
      */
     private fun checkServersLatency(button: ImageButton? = null) {
+        if (blockManagementActionWhileTurn()) return
         if (pingCheckRunning) return
         if (nodes.isEmpty()) {
             setStatus("Нет серверов для проверки")
@@ -1962,6 +1969,7 @@ class MainActivity : Activity() {
 
     private fun showState(state: String, message: String) {
         updateVpnButtonAppearance(state == "connected" || state == "connecting")
+        updateManagementButtonsState()
         setStatus(message)
 
         // Vibrate only after a real stable-state transition. Ignore the
@@ -2007,8 +2015,36 @@ class MainActivity : Activity() {
         vpnButton.clipToOutline = true
     }
 
+    private fun isTurnProxyRunning(): Boolean =
+        com.jpn.app.vpn.TurnDiagnostics.isProcessRunning(this)
+
+    private fun blockManagementActionWhileTurn(): Boolean {
+        if (!isTurnProxyRunning()) return false
+        android.widget.Toast.makeText(
+            this,
+            "Подключено к серверу для обхода белых списков. Сначала отключись от него",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+        return true
+    }
+
+    private fun updateManagementButtonsState() {
+        if (!::refreshSubscriptionButton.isInitialized || !::pingButton.isInitialized) return
+        val blocked = isTurnProxyRunning()
+        val buttonAlpha = if (blocked) 0.38f else 1f
+        refreshSubscriptionButton.alpha = buttonAlpha
+        pingButton.alpha = buttonAlpha
+        refreshSubscriptionButton.contentDescription = if (blocked)
+            "Обновление подписки недоступно во время подключения через TURN"
+        else "Обновить подписку"
+        pingButton.contentDescription = if (blocked)
+            "Проверка серверов недоступна во время подключения через TURN"
+        else "Проверка серверов"
+    }
+
     private fun setStatus(message: String) {
         if (::statusView.isInitialized) statusView.text = message
+        updateManagementButtonsState()
     }
 
     private fun hideKeyboard() {
