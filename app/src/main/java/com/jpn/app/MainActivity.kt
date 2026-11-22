@@ -1295,8 +1295,9 @@ class MainActivity : Activity() {
     private fun checkServersLatency(button: ImageButton? = null) {
         if (blockManagementActionWhileTurn()) return
         if (pingCheckRunning) return
-        if (nodes.isEmpty()) {
-            setStatus("Нет серверов для проверки")
+        val checkIndices = ordinaryNodeIndices.toList()
+        if (checkIndices.isEmpty()) {
+            setStatus("Нет основных серверов для проверки")
             return
         }
 
@@ -1319,14 +1320,18 @@ class MainActivity : Activity() {
             return
         }
 
-        val snapshot = nodes.map { JSONObject(it.toString()) }
-        setStatus("Подготавливаю проверку серверов…")
+        val snapshot = checkIndices.map { globalIndex ->
+            globalIndex to JSONObject(nodes[globalIndex].toString())
+        }
+        setStatus("Подготавливаю проверку основных серверов…")
 
         Thread {
             try {
-                snapshot.forEachIndexed { index, savedNode ->
+                snapshot.forEachIndexed { index, entry ->
+                    val globalIndex = entry.first
+                    val savedNode = entry.second
                     mainHandler.post {
-                        setStatus("Проверяю сервер ${index + 1} из ${snapshot.size}…")
+                        setStatus("Проверяю основной сервер ${index + 1} из ${snapshot.size}…")
                     }
 
                     var result: Int? = null
@@ -1377,15 +1382,15 @@ class MainActivity : Activity() {
                     }
 
                     mainHandler.post {
-                        if (index < nodes.size) {
-                            nodes[index].remove("jpnPingMs")
-                            nodes[index].remove("jpnPingFailed")
-                            nodes[index].remove("jpnPingError")
+                        if (globalIndex in nodes.indices) {
+                            nodes[globalIndex].remove("jpnPingMs")
+                            nodes[globalIndex].remove("jpnPingFailed")
+                            nodes[globalIndex].remove("jpnPingError")
                             if (result != null) {
-                                nodes[index].put("jpnPingMs", result)
+                                nodes[globalIndex].put("jpnPingMs", result)
                             } else {
-                                nodes[index].put("jpnPingFailed", true)
-                                nodes[index].put("jpnPingError", failure ?: "Причина не определена")
+                                nodes[globalIndex].put("jpnPingFailed", true)
+                                nodes[globalIndex].put("jpnPingError", failure ?: "Причина не определена")
                             }
                             renderNodes()
                         }
@@ -1399,22 +1404,22 @@ class MainActivity : Activity() {
                     vpnButton.isEnabled = true
                     nodesContainer.isEnabled = true
                     wireGuardNodesContainer.isEnabled = true
-                    val available = nodes.count { it.optInt("jpnPingMs", -1) >= 0 }
+                    val available = ordinaryNodeIndices.count { nodes[it].optInt("jpnPingMs", -1) >= 0 }
                     if (pingRestoreVpn) {
                         val restoreIndex = selectedNodeIndex.takeIf { it in nodes.indices }
                             ?: preferences.getInt(KEY_SELECTED_NODE_INDEX, -1)
                         val selected = nodes.getOrNull(restoreIndex)
                         if (selected != null) {
                             val name = selected.optString("tag").ifBlank { "Сервер ${restoreIndex + 1}" }
-                            setStatus("Проверка завершена: доступно $available из ${nodes.size}. Восстанавливаю VPN…")
+                            setStatus("Проверка завершена: доступно $available из ${snapshot.size}. Восстанавливаю VPN…")
                             connectToOutbound(selected, name)
                         } else {
                             pingRestoreVpn = false
                             pingSuppressHaptics = false
-                            setStatus("Проверка завершена: доступно $available из ${nodes.size}. Не удалось восстановить VPN: сервер не выбран")
+                            setStatus("Проверка завершена: доступно $available из ${snapshot.size}. Не удалось восстановить VPN: сервер не выбран")
                         }
                     } else {
-                        setStatus("Проверка завершена: доступно $available из ${nodes.size}")
+                        setStatus("Проверка завершена: доступно $available из ${snapshot.size}")
                     }
                 }
             }
@@ -1505,8 +1510,9 @@ class MainActivity : Activity() {
                 val globalIndex = indices[position]
                 val node = nodes[globalIndex]
                 val name = node.optString("tag").ifBlank { "Сервер ${globalIndex + 1}" }
+                val isWireGuard = node.optString("protocol").equals("wireguard", ignoreCase = true)
                 val latency = node.optInt("jpnPingMs", -1)
-                val latencyText = when {
+                val latencyText = if (isWireGuard) "" else when {
                     latency >= 0 -> "$latency мс"
                     node.optBoolean("jpnPingFailed", false) -> "∞"
                     node.optBoolean("jpnNeedsValidation", false) -> "не проверен"
@@ -1565,6 +1571,12 @@ class MainActivity : Activity() {
         }
         wireGuardNodeIndices = nodes.indices.filter {
             nodes[it].optString("protocol").equals("wireguard", ignoreCase = true)
+        }
+        // WireGuard entries are intentionally excluded from latency checks.
+        wireGuardNodeIndices.forEach { index ->
+            nodes[index].remove("jpnPingMs")
+            nodes[index].remove("jpnPingFailed")
+            nodes[index].remove("jpnPingError")
         }
 
         nodesContainer.adapter = createNodesAdapter(ordinaryNodeIndices)
