@@ -659,12 +659,12 @@ class MainActivity : Activity() {
             }
             clipToOutline = true
             addView(nodesHeaderRow, matchWidth())
-            ordinaryNodesHeader = sectionTitle("Другие серверы")
+            ordinaryNodesHeader = sectionTitle("Основные серверы")
             addView(ordinaryNodesHeader, matchWidth())
             addView(nodesContainer, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ))
-            wireGuardNodesHeader = sectionTitle("WireGuard")
+            wireGuardNodesHeader = sectionTitle("Белый список")
             addView(wireGuardNodesHeader, matchWidth())
             wireGuardNodesContainer = ListView(this@MainActivity).apply {
                 divider = android.graphics.drawable.ColorDrawable(0xFFD6D6D6.toInt())
