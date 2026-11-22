@@ -1673,10 +1673,11 @@ class MainActivity : Activity() {
         // remote WG endpoint is replaced only in this in-memory Xray config;
         // the saved subscription profile remains unchanged.
         val turnPrefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
-        val turnConfig = if (turnPrefs.getBoolean(TurnSettingsActivity.KEY_ENABLED, false)) {
-            if (!selected.optString("protocol").equals("wireguard", ignoreCase = true)) {
-                throw IllegalArgumentException("TURN на первом этапе работает только с WireGuard-профилями")
-            }
+        val selectedIsWireGuard =
+            selected.optString("protocol").equals("wireguard", ignoreCase = true)
+        val turnConfig = if (
+            turnPrefs.getBoolean(TurnSettingsActivity.KEY_ENABLED, false) && selectedIsWireGuard
+        ) {
             val turnPeer = turnPrefs.getString(TurnSettingsActivity.KEY_PEER, "").orEmpty().trim()
             val vkLink = turnPrefs.getString(TurnSettingsActivity.KEY_VK_LINK, "").orEmpty().trim()
             val localPort = turnPrefs.getString(TurnSettingsActivity.KEY_LOCAL_PORT, "9000")
