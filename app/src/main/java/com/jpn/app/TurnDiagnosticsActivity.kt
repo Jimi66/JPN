@@ -17,6 +17,7 @@ import com.jpn.app.vpn.TurnDiagnostics
 
 class TurnDiagnosticsActivity : Activity() {
     private lateinit var statusView: TextView
+    private lateinit var countersView: TextView
     private lateinit var logView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,8 +55,17 @@ class TurnDiagnosticsActivity : Activity() {
             }
         }
         root.addView(statusView)
+        countersView = TextView(this).apply {
+            textSize = 13f
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFE8F0F7.toInt())
+                cornerRadius = dp(10).toFloat()
+            }
+        }
+        root.addView(countersView)
         root.addView(TextView(this).apply {
-            text = "Последние 300 строк. Ссылки и значения похожие на ключи автоматически скрываются."
+            text = "Последние 300 строк. Ссылки, IP-адреса и значения похожие на ключи автоматически скрываются."
             textSize = 12f
             setPadding(0, dp(12), 0, dp(8))
         })
@@ -134,7 +144,22 @@ class TurnDiagnosticsActivity : Activity() {
             exit.isNotBlank() -> "Состояние: TURN-процесс остановлен. Код завершения: $exit"
             else -> "Состояние: TURN-процесс сейчас не отмечен как запущенный"
         }
-        logView.text = TurnDiagnostics.read(this).ifBlank { "Журнал пока пуст. Запусти подключение через TURN, затем обнови журнал." }
+        val log = TurnDiagnostics.read(this)
+        val lines = log.lineSequence().toList()
+        val established = lines.count { it.contains("Established DTLS connection", ignoreCase = true) }
+        val closed = lines.count { it.contains("Closed DTLS connection", ignoreCase = true) }
+        val failures = lines.count {
+            val line = it.lowercase()
+            line.contains("error") || line.contains("failed") || line.contains("ошиб")
+        }
+        val requested = Regex("Запрошено потоков: (\\d+)").find(log)?.groupValues?.get(1) ?: "—"
+        countersView.text = "Запрошено потоков: $requested\\n" +
+            "Установлено DTLS: $established\\n" +
+            "Закрыто DTLS: $closed\\n" +
+            "Активно по журналу: ${(established - closed).coerceAtLeast(0)}\\n" +
+            "Строк с ошибками: $failures\\n" +
+            "Запуск отдельных worker/получение credentials: требуют расширенного журнала ядра"
+        logView.text = log.ifBlank { "Журнал пока пуст. Запусти подключение через TURN, затем обнови журнал." }
     }
 
     private fun buildExportText(): String {
