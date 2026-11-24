@@ -77,6 +77,15 @@ object TurnDiagnostics {
             "$1$2[скрыто]"
         )
         value = value.replace(Regex("(?i)vk_profile\\.json"), "[путь профиля]")
+        // Never expose endpoint addresses in a shared diagnostic export.
+        value = value.replace(
+            Regex("(?<![\\w.])(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}(?::\\d{1,5})?"),
+            "[IP скрыт]"
+        )
+        value = value.replace(
+            Regex("(?i)(?<![0-9a-f:])(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{0,4}(?:%[\\w.-]+)?(?::\\d{1,5})?(?![0-9a-f:])"),
+            "[IPv6 скрыт]"
+        )
         return value
     }
 }
