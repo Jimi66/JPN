@@ -14,6 +14,8 @@ import android.widget.Toast
 class TurnSettingsActivity : Activity() {
 
     private lateinit var vkLinkInput: EditText
+    private lateinit var threadsInput: EditText
+    private lateinit var streamsPerCredInput: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +62,38 @@ class TurnSettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
+        root.addView(TextView(this).apply {
+            text = "Общее количество подключений"
+            textSize = 14f
+            setPadding(0, dp(14), 0, dp(5))
+        })
+        threadsInput = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            hint = "Например, 5"
+            setText(prefs.getString(KEY_THREADS, "5") ?: "5")
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        root.addView(threadsInput, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        root.addView(TextView(this).apply {
+            text = "Подключений на один набор учётных данных"
+            textSize = 14f
+            setPadding(0, dp(12), 0, dp(5))
+        })
+        streamsPerCredInput = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            hint = "Например, 5"
+            setText(prefs.getString(KEY_STREAMS_PER_CRED, "5") ?: "5")
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        root.addView(streamsPerCredInput, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
         root.addView(Button(this).apply {
             text = "Сохранить"
             setOnClickListener { saveSettings() }
@@ -81,10 +115,22 @@ class TurnSettingsActivity : Activity() {
             vkLinkInput.error = "Укажи корректную ссылку VK Call"
             return
         }
+        val threads = threadsInput.text.toString().trim().toIntOrNull()
+        if (threads == null || threads !in 1..64) {
+            threadsInput.error = "Укажи число от 1 до 64"
+            return
+        }
+        val streamsPerCred = streamsPerCredInput.text.toString().trim().toIntOrNull()
+        if (streamsPerCred == null || streamsPerCred !in 1..64) {
+            streamsPerCredInput.error = "Укажи число от 1 до 64"
+            return
+        }
         getSharedPreferences("jpn_settings", MODE_PRIVATE).edit()
             .putString(KEY_VK_LINK, link)
+            .putString(KEY_THREADS, threads.toString())
+            .putString(KEY_STREAMS_PER_CRED, streamsPerCred.toString())
             .apply()
-        Toast.makeText(this, "Ссылка VK Call сохранена", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Настройки TURN сохранены", Toast.LENGTH_LONG).show()
         setResult(RESULT_OK)
         finish()
     }
