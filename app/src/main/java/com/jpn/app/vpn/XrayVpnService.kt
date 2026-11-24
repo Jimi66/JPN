@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.VpnService
 import android.service.quicksettings.TileService
 import android.os.Build
@@ -108,6 +110,10 @@ class XrayVpnService : VpnService() {
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
     private var turnSocketProtector: TurnSocketProtector? = null
     @Volatile private var turnProcess: java.lang.Process? = null
+    private var activeTurnConfig: JSONObject? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var turnNetworkCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastDefaultNetwork: Network? = null
     private var coreStarted = false
     private var testMode = false
 
@@ -257,6 +263,8 @@ class XrayVpnService : VpnService() {
             TurnDiagnostics.record(this, "Запуск защиты TURN-сокетов")
             turnSocketProtector = TurnSocketProtector(this).also { it.start() }
             TurnDiagnostics.record(this, "Защита TURN-сокетов запущена")
+            activeTurnConfig = JSONObject(turnConfig.toString())
+            registerTurnNetworkCallback()
             startTurnClient(turnConfig)
         }
 
@@ -318,6 +326,111 @@ class XrayVpnService : VpnService() {
             else -> "VPN подключён"
         }
         publishState(if (turnConfig != null && !testMode) "connecting" else "connected", statusMessage, testMode)
+    }
+
+    /**
+     * Observe Android's default network only while a TURN session is active.
+     * Existing TURN sockets stay attached to the old network after a handover,
+     * so the Go child must recreate its sockets on the new default network.
+     */
+    private fun registerTurnNetworkCallback() {
+        unregisterTurnNetworkCallback()
+        val manager = getSystemService(ConnectivityManager::class.java)
+        connectivityManager = manager
+        lastDefaultNetwork = manager.activeNetwork
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                workerHandler.post {
+                    if (!coreStarted || activeTurnConfig == null) return@post
+                    val previous = lastDefaultNetwork
+                    if (previous == null) {
+                        lastDefaultNetwork = network
+                        TurnDiagnostics.record(this@XrayVpnService, "Исходная сеть TURN определена")
+                    } else if (previous != network) {
+                        lastDefaultNetwork = network
+                        restartTurnTransportForNetworkChange()
+                    }
+                }
+            }
+
+            override fun onLost(network: Network) {
+                workerHandler.post {
+                    if (!coreStarted || activeTurnConfig == null) return@post
+                    if (network == lastDefaultNetwork) {
+                        TurnDiagnostics.record(this@XrayVpnService, "Текущая сеть TURN потеряна; ожидается новая сеть")
+                        setTurnConnectionCount(0)
+                        publishState("connecting", "Сеть изменилась. Ожидается восстановление TURN", testMode)
+                        updateVpnNotification("Ожидание новой сети для TURN")
+                    }
+                }
+            }
+        }
+
+        turnNetworkCallback = callback
+        runCatching {
+            manager.registerDefaultNetworkCallback(callback)
+            TurnDiagnostics.record(this, "Отслеживание смены сети TURN включено")
+        }.onFailure { error ->
+            turnNetworkCallback = null
+            TurnDiagnostics.record(this, "Не удалось включить отслеживание сети: ${error.javaClass.simpleName}")
+        }
+    }
+
+    private fun unregisterTurnNetworkCallback() {
+        val callback = turnNetworkCallback
+        turnNetworkCallback = null
+        if (callback != null) {
+            runCatching { connectivityManager?.unregisterNetworkCallback(callback) }
+        }
+        connectivityManager = null
+        lastDefaultNetwork = null
+    }
+
+    private fun setTurnConnectionCount(connections: Int) {
+        val prefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        val limit = prefs.getInt("turn_connection_limit", 0)
+        prefs.edit().putInt("turn_connections", connections.coerceAtLeast(0)).apply()
+    }
+
+    /**
+     * Recreate only the TURN transport process. The Android VPN interface and
+     * Xray remain alive, so VpnService and the WireGuard-side TUN are not torn
+     * down during a Wi-Fi/mobile-data handover.
+     */
+    private fun restartTurnTransportForNetworkChange() {
+        val config = activeTurnConfig?.let { JSONObject(it.toString()) } ?: return
+        if (!coreStarted) return
+
+        TurnDiagnostics.record(this, "Обнаружена смена сети; перезапуск только TURN-транспорта")
+        publishState("connecting", "Сеть изменилась. Переподключение TURN...", testMode)
+        updateVpnNotification("Переподключение TURN")
+        setTurnConnectionCount(0)
+
+        val oldProcess = turnProcess
+        turnProcess = null
+        if (oldProcess != null) {
+            runCatching { oldProcess.destroy() }
+            val exited = runCatching { oldProcess.waitFor(1, TimeUnit.SECONDS) }.getOrDefault(false)
+            if (!exited) {
+                TurnDiagnostics.record(this, "Старый TURN-процесс не завершился штатно; принудительная остановка")
+                runCatching { oldProcess.destroyForcibly() }
+                runCatching { oldProcess.waitFor() }
+            }
+            TurnDiagnostics.record(this, "Старый TURN-процесс остановлен для смены сети")
+            TurnDiagnostics.setProcessState(this, false, runCatching { oldProcess.exitValue() }.getOrNull())
+        }
+
+        try {
+            startTurnClient(config)
+            TurnDiagnostics.record(this, "Новый TURN-процесс запущен через текущую сеть")
+            publishState("connecting", "TURN восстанавливает соединения...", testMode)
+            updateVpnNotification("Восстановление TURN-соединения")
+        } catch (error: Exception) {
+            TurnDiagnostics.record(this, "Не удалось перезапустить TURN после смены сети: ${error.javaClass.simpleName}")
+            publishState("error", "Не удалось восстановить TURN: ${error.message ?: "ошибка запуска"}", testMode)
+            updateVpnNotification("Ошибка восстановления TURN")
+        }
     }
 
     private fun startTurnClient(turnConfig: JSONObject) {
@@ -460,6 +573,8 @@ class XrayVpnService : VpnService() {
     }
 
     private fun stopCoreAndTunnel() {
+        unregisterTurnNetworkCallback()
+        activeTurnConfig = null
         clearCaptchaNotification()
         if (coreStarted) {
             runCatching {
