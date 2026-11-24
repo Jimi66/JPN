@@ -298,6 +298,116 @@ def patch_streams_per_credential(client: Path) -> None:
     path.write_text(source, encoding="utf-8")
 
 
+def patch_turn_diagnostics(client: Path) -> None:
+    path = client / "main.go"
+    source = path.read_text(encoding="utf-8")
+
+    source = replace_once(
+        source,
+        '\terr := oneDtlsConnection(ctx, peer, listenConn, inboundChan, connchan, okchan, streamID)\n'
+        '\t\t\tif err != nil {',
+        '\terr := oneDtlsConnection(ctx, peer, listenConn, inboundChan, connchan, okchan, streamID)\n'
+        '\t\t\tif err != nil {\n'
+        '\t\t\t\tlog.Printf("[JPN_DIAG] DTLS_HANDSHAKE_FAILED stream=%d error=%v", streamID, err)',
+        "log DTLS worker failures",
+    )
+
+    source = replace_once(
+        source,
+        '\tdtlsConn, err1 := dtlsFunc(dtlsctx, conn1, peer)\n'
+        '\tif err1 != nil {\n'
+        '\t\treturn fmt.Errorf("failed to connect DTLS: %s", err1)\n'
+        '\t}',
+        '\tlog.Printf("[JPN_DIAG] DTLS_HANDSHAKE_START stream=%d", streamID)\n'
+        '\tdtlsConn, err1 := dtlsFunc(dtlsctx, conn1, peer)\n'
+        '\tif err1 != nil {\n'
+        '\t\tlog.Printf("[JPN_DIAG] DTLS_HANDSHAKE_FAILED stream=%d error=%v", streamID, err1)\n'
+        '\t\treturn fmt.Errorf("failed to connect DTLS: %s", err1)\n'
+        '\t}\n'
+        '\tlog.Printf("[JPN_DIAG] DTLS_HANDSHAKE_OK stream=%d", streamID)',
+        "log DTLS handshake stages",
+    )
+
+    source = replace_once(
+        source,
+        '\tuser, pass, urlTarget, err1 := turnParams.getCreds(ctx, turnParams.link, streamID)\n'
+        '\tif err1 != nil {',
+        '\tlog.Printf("[JPN_DIAG] CREDENTIALS_REQUEST stream=%d cache=%d", streamID, getCacheID(streamID))\n'
+        '\tuser, pass, urlTarget, err1 := turnParams.getCreds(ctx, turnParams.link, streamID)\n'
+        '\tif err1 != nil {',
+        "log TURN credential request",
+    )
+    source = replace_once(
+        source,
+        '\t\terr = fmt.Errorf("failed to get TURN credentials: %s", err1)\n'
+        '\t\treturn\n'
+        '\t}\n'
+        '\turlhost, urlport, err1 := net.SplitHostPort(urlTarget)',
+        '\t\terr = fmt.Errorf("failed to get TURN credentials: %s", err1)\n'
+        '\t\treturn\n'
+        '\t}\n'
+        '\tlog.Printf("[JPN_DIAG] CREDENTIALS_OK stream=%d cache=%d", streamID, getCacheID(streamID))\n'
+        '\turlhost, urlport, err1 := net.SplitHostPort(urlTarget)',
+        "log successful TURN credentials",
+    )
+
+    source = replace_once(
+        source,
+        '\trelayConn, err1 := client.Allocate()\n'
+        '\tif err1 != nil {',
+        '\tlog.Printf("[JPN_DIAG] TURN_ALLOCATE_START stream=%d", streamID)\n'
+        '\trelayConn, err1 := client.Allocate()\n'
+        '\tif err1 != nil {',
+        "log TURN allocation start",
+    )
+    source = replace_once(
+        source,
+        '\t// Reset error count on successful allocation\n'
+        '\tgetStreamCache(streamID).errorCount.Store(0)',
+        '\tlog.Printf("[JPN_DIAG] TURN_ALLOCATE_OK stream=%d", streamID)\n'
+        '\t// Reset error count on successful allocation\n'
+        '\tgetStreamCache(streamID).errorCount.Store(0)',
+        "log successful TURN allocation",
+    )
+
+    source = replace_once(
+        source,
+        '\tnumStreams := *n\n'
+        '\tif numStreams <= 0 {\n'
+        '\t\tnumStreams = 1\n'
+        '\t}',
+        '\tnumStreams := *n\n'
+        '\tif numStreams <= 0 {\n'
+        '\t\tnumStreams = 1\n'
+        '\t}\n'
+        '\tlog.Printf("[JPN_DIAG] WORKER_PLAN requested=%d", numStreams)',
+        "log requested worker count",
+    )
+    source = replace_once(
+        source,
+        '\tokchan := make(chan struct{})\n'
+        '\tconnchan := make(chan net.PacketConn)\n'
+        '\twg1.Add(1)',
+        '\tokchan := make(chan struct{})\n'
+        '\tconnchan := make(chan net.PacketConn)\n'
+        '\tlog.Printf("[JPN_DIAG] WORKER_PAIR_CREATED stream=%d index=0", 1)\n'
+        '\twg1.Add(1)',
+        "log first worker pair creation",
+    )
+    source = replace_once(
+        source,
+        '\tfor i := 1; i < numStreams; i++ {\n'
+        '\t\tcchan := make(chan net.PacketConn)',
+        '\tfor i := 1; i < numStreams; i++ {\n'
+        '\t\tlog.Printf("[JPN_DIAG] WORKER_PAIR_CREATED stream=%d index=%d", i, i)\n'
+        '\t\tcchan := make(chan net.PacketConn)',
+        "log additional worker pair creation",
+    )
+
+    path.write_text(source, encoding="utf-8")
+
+
+
 def patch_manual_captcha(client: Path) -> None:
     path = client / "manual_captcha.go"
     source = path.read_text(encoding="utf-8")
@@ -580,6 +690,7 @@ def main() -> None:
 
     patch_main(client)
     patch_streams_per_credential(client)
+    patch_turn_diagnostics(client)
     patch_manual_captcha(client)
     patch_android_captcha_url(client)
     patch_manual_captcha_wait(client)
