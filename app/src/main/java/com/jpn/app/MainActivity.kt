@@ -1755,9 +1755,7 @@ class MainActivity : Activity() {
             val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "5")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
                 ?: throw IllegalArgumentException("Проверь количество потоков TURN")
-            val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "5")
-                ?.toIntOrNull()?.takeIf { it in 1..64 }
-                ?: throw IllegalArgumentException("Проверь число потоков на учётную запись TURN")
+            val streamsPerCredential = 10
             val peers = selected.optJSONObject("settings")?.optJSONArray("peers")
                 ?: throw IllegalArgumentException("В WireGuard-профиле не найдены настройки Peer")
             val wgPeer = peers.optJSONObject(0)
