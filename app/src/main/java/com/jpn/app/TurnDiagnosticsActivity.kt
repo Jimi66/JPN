@@ -152,7 +152,7 @@ class TurnDiagnosticsActivity : Activity() {
             val line = it.lowercase()
             line.contains("error") || line.contains("failed") || line.contains("ошиб")
         }
-        val requested = Regex("Запрошено потоков: (\\d+)").find(log)?.groupValues?.get(1) ?: "—"
+        val requested = Regex("(?i)запрошено потоков: (\\d+)").find(log)?.groupValues?.get(1) ?: "—"
         countersView.text = "Запрошено потоков: $requested\\n" +
             "Установлено DTLS: $established\\n" +
             "Закрыто DTLS: $closed\\n" +
