@@ -46,6 +46,8 @@ class TurnCaptchaActivity : Activity() {
     private var status: TextView? = null
     private var connectProxy: CaptchaConnectProxy? = null
     @Volatile private var tokenSubmitted = false
+    private var currentCaptchaUrl: String? = null
+    private var captchaGeneration = 0
     private val directExecutor = Executor { command -> command.run() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +58,8 @@ class TurnCaptchaActivity : Activity() {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         val captchaUrl = intent.getStringExtra(XrayVpnService.EXTRA_CAPTCHA_URL).orEmpty()
+        currentCaptchaUrl = captchaUrl
+        clearPendingCaptchaUrl(captchaUrl)
         val uri = runCatching { Uri.parse(captchaUrl) }.getOrNull()
         if (uri == null || !isAllowedVkUrl(uri)) {
             Toast.makeText(this, "Недопустимый адрес CAPTCHA VK", Toast.LENGTH_LONG).show()
@@ -177,6 +181,27 @@ class TurnCaptchaActivity : Activity() {
             })
         } else {
             progress?.visibility = View.GONE
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        if (intent == null) return
+        setIntent(intent)
+        val nextUrl = intent.getStringExtra(XrayVpnService.EXTRA_CAPTCHA_URL).orEmpty()
+        val uri = runCatching { Uri.parse(nextUrl) }.getOrNull() ?: return
+        if (!isAllowedVkUrl(uri)) return
+        currentCaptchaUrl = nextUrl
+        captchaGeneration++
+        tokenSubmitted = false
+        clearPendingCaptchaUrl(nextUrl)
+        webView?.loadUrl(nextUrl)
+    }
+
+    private fun clearPendingCaptchaUrl(url: String) {
+        val prefs = getSharedPreferences("jpn_settings", MODE_PRIVATE)
+        if (prefs.getString("turn_pending_captcha_url", null) == url) {
+            prefs.edit().remove("turn_pending_captcha_url").apply()
         }
     }
 
@@ -379,14 +404,19 @@ class TurnCaptchaActivity : Activity() {
         fun onSuccess(token: String?) {
             if (token.isNullOrBlank() || token.length > 8192 || tokenSubmitted) return
             tokenSubmitted = true
+            val submittedUrl = currentCaptchaUrl.orEmpty()
+            val submittedGeneration = captchaGeneration
             Thread({
                 val accepted = postTokenToTurnCore(token)
                 runOnUiThread {
                     if (accepted) {
-                        status?.text = "VK подтвердил проверку. Продолжаю подключение…"
-                        Toast.makeText(this@TurnCaptchaActivity, "CAPTCHA подтверждена VK", Toast.LENGTH_SHORT).show()
-                        finish()
-                    } else {
+                        XrayVpnService.captchaCompleted(this@TurnCaptchaActivity, submittedUrl)
+                        if (submittedGeneration == captchaGeneration) {
+                            status?.text = "VK подтвердил проверку. Продолжаю подключение…"
+                            Toast.makeText(this@TurnCaptchaActivity, "CAPTCHA подтверждена VK", Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
+                    } else if (submittedGeneration == captchaGeneration) {
                         tokenSubmitted = false
                         status?.text = "Не удалось передать результат в TURN-клиент. Повтори проверку."
                     }
