@@ -408,6 +408,130 @@ def patch_turn_diagnostics(client: Path) -> None:
 
 
 
+
+def patch_sequential_credential_groups(client: Path) -> None:
+    path = client / "main.go"
+    source = path.read_text(encoding="utf-8")
+
+    source = replace_once(
+        source,
+        '\tif okchan != nil {\n'
+        '\t\tgo func() {\n'
+        '\t\t\tselect {\n'
+        '\t\t\tcase okchan <- struct{}{}:\n'
+        '\t\t\tcase <-dtlsctx.Done():\n'
+        '\t\t\t}\n'
+        '\t\t}()\n'
+        '\t}',
+        '\tif okchan != nil {\n'
+        '\t\tselect {\n'
+        '\t\tcase okchan <- struct{}{}:\n'
+        '\t\tdefault:\n'
+        '\t\t}\n'
+        '\t}',
+        "signal each worker's first successful DTLS handshake without blocking retries",
+    )
+
+    old = (
+        '\tokchan := make(chan struct{})\n'
+        '\tconnchan := make(chan net.PacketConn)\n'
+        '\tlog.Printf("[JPN_DIAG] WORKER_PAIR_CREATED stream=%d index=0", 1)\n'
+        '\twg1.Add(1)\n'
+        '\tgo func() {\n'
+        '\t\tdefer wg1.Done()\n'
+        '\t\toneDtlsConnectionLoop(ctx, peer, listenConn, inboundChan, connchan, okchan, 1)\n'
+        '\t}()\n'
+        '\twg1.Add(1)\n'
+        '\tgo func() {\n'
+        '\t\tdefer wg1.Done()\n'
+        '\t\toneTurnConnectionLoop(ctx, params, peer, connchan, t, 1)\n'
+        '\t}()\n'
+        '\n'
+        '\tselect {\n'
+        '\tcase <-okchan:\n'
+        '\tcase <-ctx.Done():\n'
+        '\t}\n'
+        '\n'
+        '\tfor i := 1; i < numStreams; i++ {\n'
+        '\t\tlog.Printf("[JPN_DIAG] WORKER_PAIR_CREATED stream=%d index=%d", i, i)\n'
+        '\t\tcchan := make(chan net.PacketConn)\n'
+        '\t\twg1.Add(1)\n'
+        '\t\tgo func(streamID int) {\n'
+        '\t\t\tdefer wg1.Done()\n'
+        '\t\t\toneDtlsConnectionLoop(ctx, peer, listenConn, inboundChan, cchan, nil, streamID)\n'
+        '\t\t}(i)\n'
+        '\t\twg1.Add(1)\n'
+        '\t\tgo func(streamID int) {\n'
+        '\t\t\tdefer wg1.Done()\n'
+        '\t\t\toneTurnConnectionLoop(ctx, params, peer, cchan, t, streamID)\n'
+        '\t\t}(i)\n'
+        '\t}\n'
+    )
+    new = (
+        '\t// Preserve the upstream stream-ID sequence (including its existing first-ID behavior),\n'
+        '\t// but start one credential-cache group at a time.\n'
+        '\tstreamIDs := make([]int, numStreams)\n'
+        '\tstreamIDs[0] = 1\n'
+        '\tfor i := 1; i < numStreams; i++ {\n'
+        '\t\tstreamIDs[i] = i\n'
+        '\t}\n'
+        '\tfor groupStart := 0; groupStart < numStreams; {\n'
+        '\t\tcacheID := getCacheID(streamIDs[groupStart])\n'
+        '\t\tgroupEnd := groupStart + 1\n'
+        '\t\tfor groupEnd < numStreams && getCacheID(streamIDs[groupEnd]) == cacheID {\n'
+        '\t\t\tgroupEnd++\n'
+        '\t\t}\n'
+        '\t\tgroupSize := groupEnd - groupStart\n'
+        '\t\tlog.Printf("[JPN_DIAG] CREDENTIAL_GROUP_START cache=%d workers=%d", cacheID, groupSize)\n'
+        '\t\treadyChannels := make([]chan struct{}, 0, groupSize)\n'
+        '\t\tfor workerIndex := groupStart; workerIndex < groupEnd; workerIndex++ {\n'
+        '\t\t\tstreamID := streamIDs[workerIndex]\n'
+        '\t\t\tcchan := make(chan net.PacketConn)\n'
+        '\t\t\tready := make(chan struct{}, 1)\n'
+        '\t\t\treadyChannels = append(readyChannels, ready)\n'
+        '\t\t\tlog.Printf("[JPN_DIAG] WORKER_PAIR_CREATED stream=%d index=%d cache=%d", streamID, workerIndex, cacheID)\n'
+        '\t\t\twg1.Add(1)\n'
+        '\t\t\tgo func(connChannel chan net.PacketConn, readyChannel chan struct{}, id int) {\n'
+        '\t\t\t\tdefer wg1.Done()\n'
+        '\t\t\t\toneDtlsConnectionLoop(ctx, peer, listenConn, inboundChan, connChannel, readyChannel, id)\n'
+        '\t\t\t}(cchan, ready, streamID)\n'
+        '\t\t\twg1.Add(1)\n'
+        '\t\t\tgo func(connChannel chan net.PacketConn, id int) {\n'
+        '\t\t\t\tdefer wg1.Done()\n'
+        '\t\t\t\toneTurnConnectionLoop(ctx, params, peer, connChannel, t, id)\n'
+        '\t\t\t}(cchan, streamID)\n'
+        '\t\t}\n'
+        '\t\tgroupTimer := time.NewTimer(5 * time.Minute)\n'
+        '\t\tgroupReady := true\n'
+        '\t\tfor workerIndex, ready := range readyChannels {\n'
+        '\t\t\tselect {\n'
+        '\t\t\tcase <-ready:\n'
+        '\t\t\t\tlog.Printf("[JPN_DIAG] WORKER_DTLS_READY cache=%d stream=%d", cacheID, streamIDs[groupStart+workerIndex])\n'
+        '\t\t\tcase <-groupTimer.C:\n'
+        '\t\t\t\tgroupReady = false\n'
+        '\t\t\tcase <-ctx.Done():\n'
+        '\t\t\t\tgroupReady = false\n'
+        '\t\t\t}\n'
+        '\t\t\tif !groupReady {\n'
+        '\t\t\t\tbreak\n'
+        '\t\t\t}\n'
+        '\t\t}\n'
+        '\t\tif !groupTimer.Stop() {\n'
+        '\t\t\tselect { case <-groupTimer.C: default: }\n'
+        '\t\t}\n'
+        '\t\tif !groupReady {\n'
+        '\t\t\tlog.Printf("[JPN_DIAG] CREDENTIAL_GROUP_TIMEOUT cache=%d ready_workers_incomplete=true", cacheID)\n'
+        '\t\t\tif globalAppCancel != nil { globalAppCancel() }\n'
+        '\t\t\tbreak\n'
+        '\t\t}\n'
+        '\t\tlog.Printf("[JPN_DIAG] CREDENTIAL_GROUP_READY cache=%d workers=%d", cacheID, groupSize)\n'
+        '\t\tgroupStart = groupEnd\n'
+        '\t}\n'
+    )
+    source = replace_once(source, old, new, "serialize TURN worker startup by credential cache readiness")
+    path.write_text(source, encoding="utf-8")
+
+
 def patch_manual_captcha(client: Path) -> None:
     path = client / "manual_captcha.go"
     source = path.read_text(encoding="utf-8")
@@ -691,6 +815,7 @@ def main() -> None:
     patch_main(client)
     patch_streams_per_credential(client)
     patch_turn_diagnostics(client)
+    patch_sequential_credential_groups(client)
     patch_manual_captcha(client)
     patch_android_captcha_url(client)
     patch_manual_captcha_wait(client)
