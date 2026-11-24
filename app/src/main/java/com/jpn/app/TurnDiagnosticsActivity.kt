@@ -152,13 +152,16 @@ class TurnDiagnosticsActivity : Activity() {
             val line = it.lowercase()
             line.contains("error") || line.contains("failed") || line.contains("ошиб")
         }
+        fun count(marker: String): Int = lines.count { it.contains(marker) }
         val requested = Regex("(?i)запрошено потоков: (\\d+)").find(log)?.groupValues?.get(1) ?: "—"
-        countersView.text = "Запрошено потоков: $requested\\n" +
-            "Установлено DTLS: $established\\n" +
-            "Закрыто DTLS: $closed\\n" +
-            "Активно по журналу: ${(established - closed).coerceAtLeast(0)}\\n" +
-            "Строк с ошибками: $failures\\n" +
-            "Запуск отдельных worker/получение credentials: требуют расширенного журнала ядра"
+        countersView.text = "Запрошено потоков: $requested\n" +
+            "Создано пар worker: ${count("WORKER_PAIR_CREATED")}\n" +
+            "DTLS: успешно ${count("DTLS_HANDSHAKE_OK")}, ошибок ${count("DTLS_HANDSHAKE_FAILED")}\n" +
+            "Учётные данные: запросов ${count("CREDENTIALS_REQUEST")}, успешно ${count("CREDENTIALS_OK")}\n" +
+            "TURN Allocate: успешно ${count("TURN_ALLOCATE_OK")}, запусков ${count("TURN_ALLOCATE_START")}\n" +
+            "DTLS установлено: $established, закрыто: $closed\n" +
+            "Активно по журналу: ${(established - closed).coerceAtLeast(0)}\n" +
+            "Строк с ошибками: $failures"
         logView.text = log.ifBlank { "Журнал пока пуст. Запусти подключение через TURN, затем обнови журнал." }
     }
 
