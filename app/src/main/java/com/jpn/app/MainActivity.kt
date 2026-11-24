@@ -88,6 +88,8 @@ class MainActivity : Activity() {
         private const val KEY_VPN_STATE = "vpn_state"
         private const val KEY_SELECTED_NODE_INDEX = "selected_node_index"
         private const val VPN_REQUEST_CODE = 4102
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4106
+        private const val KEY_NOTIFICATION_PERMISSION_REQUESTED = "notification_permission_requested"
         const val ACTION_QUICK_SETTINGS_TOGGLE = "com.jpn.app.action.QUICK_SETTINGS_TOGGLE"
         private const val MAX_SUBSCRIPTION_BYTES = 16 * 1024 * 1024
         const val KEY_PENDING_TURN_CAPTCHA = "turn_pending_captcha_url"
@@ -185,11 +187,25 @@ class MainActivity : Activity() {
         appliedDarkTheme = JpnTheme.isDark(this)
         lastHapticVpnState = preferences.getString(KEY_VPN_STATE, "disconnected")
         buildScreen()
+        requestNotificationPermissionIfNeeded()
         startPingGCheck()
         ensureGeoDatabasesBeforeUse()
 
     }
 
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (launchedFromQuickSettings || Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS") == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            preferences.getBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, false)
+        ) return
+
+        preferences.edit().putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, true).apply()
+        requestPermissions(
+            arrayOf("android.permission.POST_NOTIFICATIONS"),
+            NOTIFICATION_PERMISSION_REQUEST_CODE
+        )
+    }
 
     private fun ensureGeoDatabasesBeforeUse() {
         if (GeoDatabaseInstaller.areDatabasesValid(this)) {
