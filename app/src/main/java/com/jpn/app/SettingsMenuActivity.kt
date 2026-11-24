@@ -110,6 +110,10 @@ class SettingsMenuActivity : Activity() {
         addSubItem(turnItems, "Ссылка VK Call", textColor, secondaryColor) {
             startActivity(Intent(this, TurnSettingsActivity::class.java))
         }
+        addDivider(turnItems, borderColor)
+        addSubItem(turnItems, "Диагностика TURN", textColor, secondaryColor) {
+            startActivity(Intent(this, TurnDiagnosticsActivity::class.java))
+        }
         content.addView(turnItems, sectionParams())
 
         // Keep the discreet credits and the seven-tap video easter egg
