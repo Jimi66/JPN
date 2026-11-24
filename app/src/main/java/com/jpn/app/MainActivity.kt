@@ -1752,10 +1752,10 @@ class MainActivity : Activity() {
             val localPort = turnPrefs.getString(TurnSettingsActivity.KEY_LOCAL_PORT, "9000")
                 ?.toIntOrNull()?.takeIf { it in 1024..65535 }
                 ?: throw IllegalArgumentException("Некорректный локальный UDP-порт TURN")
-            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "40")
+            val threads = turnPrefs.getString(TurnSettingsActivity.KEY_THREADS, "5")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
                 ?: throw IllegalArgumentException("Проверь количество потоков TURN")
-            val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "20")
+            val streamsPerCredential = turnPrefs.getString(TurnSettingsActivity.KEY_STREAMS_PER_CRED, "5")
                 ?.toIntOrNull()?.takeIf { it in 1..64 }
                 ?: throw IllegalArgumentException("Проверь число потоков на учётную запись TURN")
             val peers = selected.optJSONObject("settings")?.optJSONArray("peers")
