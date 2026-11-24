@@ -315,6 +315,7 @@ class XrayVpnService : VpnService() {
             .putInt("turn_connections", 0)
             .putInt("turn_connection_limit", threads)
             .apply()
+        TurnDiagnostics.record(this, "Параметры запуска: запрошено потоков: $threads; потоков на credential cache: $streamsPerCredential")
         TurnDiagnostics.record(this, "Запуск Go TURN-процесса")
         val child = builder.start()
         turnProcess = child
