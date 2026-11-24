@@ -15,7 +15,7 @@ object TurnDiagnostics {
     private const val KEY_RUNNING = "turn_diagnostics_running"
     private const val KEY_EXIT = "turn_diagnostics_exit"
     private const val KEY_STARTED_AT = "turn_diagnostics_started_at"
-    private const val MAX_LINES = 300
+    private const val MAX_LINES = 1200
     private val lock = Any()
     private val timestampFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
