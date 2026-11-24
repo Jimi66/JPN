@@ -39,9 +39,14 @@ class XrayVpnService : VpnService() {
         const val EXTRA_TURN_CONNECTION_LIMIT = "turn_connection_limit"
         const val EXTRA_CAPTCHA_URL = "captcha_url"
         const val ACTION_CAPTCHA_OPENED = "com.jpn.app.vpn.CAPTCHA_OPENED"
+        const val ACTION_CAPTCHA_COMPLETED = "com.jpn.app.vpn.CAPTCHA_COMPLETED"
+        const val ACTION_CAPTCHA_PERMISSION_GRANTED = "com.jpn.app.vpn.CAPTCHA_PERMISSION_GRANTED"
 
         private const val CHANNEL_ID = "jpn_vpn"
         private const val NOTIFICATION_ID = 4101
+        private const val CAPTCHA_CHANNEL_ID = "jpn_captcha"
+        private const val CAPTCHA_NOTIFICATION_ID = 4102
+        private const val KEY_CAPTCHA_NOTIFICATION_URL = "turn_captcha_notification_url"
 
         // A single process-wide queue serializes VPN lifecycle work across
         // service instances. A replacement service must not start its core
@@ -68,6 +73,24 @@ class XrayVpnService : VpnService() {
 
         fun captchaOpened(context: Context) {
             runCatching { context.startService(Intent(context, XrayVpnService::class.java).apply { action = ACTION_CAPTCHA_OPENED }) }
+        }
+
+        fun captchaCompleted(context: Context, url: String) {
+            runCatching {
+                context.startService(Intent(context, XrayVpnService::class.java).apply {
+                    action = ACTION_CAPTCHA_COMPLETED
+                    putExtra(EXTRA_CAPTCHA_URL, url)
+                })
+            }
+        }
+
+        fun refreshCaptchaNotification(context: Context, url: String) {
+            runCatching {
+                context.startService(Intent(context, XrayVpnService::class.java).apply {
+                    action = ACTION_CAPTCHA_PERMISSION_GRANTED
+                    putExtra(EXTRA_CAPTCHA_URL, url)
+                })
+            }
         }
 
         fun stop(context: Context, testMode: Boolean = false) {
@@ -105,6 +128,22 @@ class XrayVpnService : VpnService() {
         when (intent?.action) {
             ACTION_CAPTCHA_OPENED -> {
                 updateVpnNotification("VPN-подключение активно")
+                return START_NOT_STICKY
+            }
+            ACTION_CAPTCHA_COMPLETED -> {
+                val completedUrl = intent.getStringExtra(EXTRA_CAPTCHA_URL)
+                val prefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+                if (!completedUrl.isNullOrBlank() &&
+                    prefs.getString(KEY_CAPTCHA_NOTIFICATION_URL, null) == completedUrl
+                ) {
+                    getSystemService(NotificationManager::class.java).cancel(CAPTCHA_NOTIFICATION_ID)
+                    prefs.edit().remove(KEY_CAPTCHA_NOTIFICATION_URL).apply()
+                    TurnDiagnostics.record(this, "Уведомление CAPTCHA удалено после передачи токена TURN-клиенту")
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_CAPTCHA_PERMISSION_GRANTED -> {
+                intent.getStringExtra(EXTRA_CAPTCHA_URL)?.let { showCaptchaNotification(it) }
                 return START_NOT_STICKY
             }
             ACTION_STOP -> {
@@ -496,9 +535,10 @@ class XrayVpnService : VpnService() {
         }
 
         return runCatching {
+            showCaptchaNotification(url)
             if (com.jpn.app.MainActivity.isVisible) {
                 startActivity(Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     putExtra(EXTRA_CAPTCHA_URL, url)
                 })
                 TurnDiagnostics.record(this, "Встроенный экран VK CAPTCHA открыт в JPN")
@@ -507,13 +547,63 @@ class XrayVpnService : VpnService() {
                     .edit()
                     .putString(com.jpn.app.MainActivity.KEY_PENDING_TURN_CAPTCHA, url)
                     .apply()
-                updateVpnNotification("Открой JPN для подтверждения CAPTCHA VK")
-                TurnDiagnostics.record(this, "CAPTCHA ожидает: открой JPN; URL сохранён до возвращения пользователя")
+                TurnDiagnostics.record(this, "CAPTCHA ожидает: открой JPN или нажми уведомление; URL сохранён до возвращения пользователя")
             }
             true
         }.onFailure { error ->
             TurnDiagnostics.record(this, "Не удалось открыть экран CAPTCHA: ${error.message ?: "ошибка Android"}")
         }.getOrDefault(false)
+    }
+
+    private fun showCaptchaNotification(url: String) {
+        val prefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_CAPTCHA_NOTIFICATION_URL, url).apply()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CAPTCHA_CHANNEL_ID,
+                "JPN — CAPTCHA",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Уведомления о необходимости подтвердить CAPTCHA VK"
+                enableVibration(true)
+            }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+
+        val openCaptchaIntent = Intent(this, com.jpn.app.TurnCaptchaActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(EXTRA_CAPTCHA_URL, url)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            4105,
+            openCaptchaIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CAPTCHA_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+        val notification = builder
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("JPN — требуется CAPTCHA")
+            .setContentText("Подтверди CAPTCHA VK, чтобы продолжить VPN")
+            .setContentIntent(contentIntent)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setPriority(Notification.PRIORITY_HIGH)
+            .setOnlyAlertOnce(false)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .build()
+        runCatching {
+            getSystemService(NotificationManager::class.java)
+                .notify(CAPTCHA_NOTIFICATION_ID, notification)
+        }.onFailure { error ->
+            TurnDiagnostics.record(this, "Не удалось показать уведомление CAPTCHA: ${error.message ?: "ошибка Android"}")
+        }
     }
 
     private fun publishTurnConnectionCount(connections: Int, limit: Int) {
