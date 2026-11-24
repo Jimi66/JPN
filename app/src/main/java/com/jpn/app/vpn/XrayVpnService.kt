@@ -460,6 +460,7 @@ class XrayVpnService : VpnService() {
     }
 
     private fun stopCoreAndTunnel() {
+        clearCaptchaNotification()
         if (coreStarted) {
             runCatching {
                 LibXray.invoke(
@@ -553,6 +554,16 @@ class XrayVpnService : VpnService() {
         }.onFailure { error ->
             TurnDiagnostics.record(this, "Не удалось открыть экран CAPTCHA: ${error.message ?: "ошибка Android"}")
         }.getOrDefault(false)
+    }
+
+    private fun clearCaptchaNotification() {
+        runCatching {
+            getSystemService(NotificationManager::class.java).cancel(CAPTCHA_NOTIFICATION_ID)
+        }
+        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).edit()
+            .remove(KEY_CAPTCHA_NOTIFICATION_URL)
+            .remove(com.jpn.app.MainActivity.KEY_PENDING_TURN_CAPTCHA)
+            .apply()
     }
 
     private fun showCaptchaNotification(url: String) {
