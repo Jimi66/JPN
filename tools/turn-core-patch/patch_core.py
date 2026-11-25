@@ -532,6 +532,188 @@ def patch_sequential_credential_groups(client: Path) -> None:
     path.write_text(source, encoding="utf-8")
 
 
+
+def patch_quota_recovery(client: Path) -> None:
+    path = client / "main.go"
+    source = path.read_text(encoding="utf-8")
+
+    source = replace_once(
+        source,
+        'func (c *StreamCredentialsCache) invalidate(streamID int) {\n'
+        '\tc.mutex.Lock()\n'
+        '\tc.creds = TurnCredentials{}\n'
+        '\tc.mutex.Unlock()\n'
+        '\n'
+        '\tc.errorCount.Store(0)\n'
+        '\tc.lastErrorTime.Store(0)\n'
+        '\n'
+        '\tlog.Printf("[STREAM %d] [VK Auth] Credentials cache invalidated", streamID)\n'
+        '}',
+        'func (c *StreamCredentialsCache) invalidate(streamID int) {\n'
+        '\tc.mutex.Lock()\n'
+        '\tc.creds = TurnCredentials{}\n'
+        '\tc.mutex.Unlock()\n'
+        '\n'
+        '\tc.errorCount.Store(0)\n'
+        '\tc.lastErrorTime.Store(0)\n'
+        '\n'
+        '\tlog.Printf("[STREAM %d] [VK Auth] Credentials cache invalidated", streamID)\n'
+        '}\n'
+        '\n'
+        '// invalidateCredentialsIfMatch invalidates a cache only once for the\n'
+        '// credential pair that received 486. Other workers using that same pair\n'
+        '// cannot repeatedly clear credentials fetched by the first retry.\n'
+        'func invalidateCredentialsIfMatch(streamID int, username, password string) bool {\n'
+        '\tcache := getStreamCache(streamID)\n'
+        '\tcache.mutex.Lock()\n'
+        '\tdefer cache.mutex.Unlock()\n'
+        '\tif username == "" || password == "" || cache.creds.Username != username || cache.creds.Password != password {\n'
+        '\t\treturn false\n'
+        '\t}\n'
+        '\tcache.creds = TurnCredentials{}\n'
+        '\tcache.errorCount.Store(0)\n'
+        '\tcache.lastErrorTime.Store(0)\n'
+        '\tlog.Printf("[JPN_DIAG] CREDENTIAL_CACHE_INVALIDATED cache=%d reason=allocation_quota", getCacheID(streamID))\n'
+        '\treturn true\n'
+        '}',
+        "add single-flight credential invalidation for TURN 486",
+    )
+
+    source = replace_once(
+        source,
+        'func isAuthError(err error) bool {',
+        'func isQuotaError(err error) bool {\n'
+        '\tif err == nil { return false }\n'
+        '\terrText := strings.ToLower(err.Error())\n'
+        '\treturn strings.Contains(errText, "486") && strings.Contains(errText, "allocation quota reached")\n'
+        '}\n'
+        '\n'
+        'func isAuthError(err error) bool {',
+        "recognize TURN allocation quota errors",
+    )
+
+    source = replace_once(
+        source,
+        '\trelayConn, err1 := client.Allocate()\n'
+        '\tif err1 != nil {\n'
+        '\t\tif isAuthError(err1) {',
+        '\trelayConn, err1 := client.Allocate()\n'
+        '\tif err1 != nil {\n'
+        '\t\tif isQuotaError(err1) {\n'
+        '\t\t\tinvalidated := invalidateCredentialsIfMatch(streamID, user, pass)\n'
+        '\t\t\tlog.Printf("[JPN_DIAG] TURN_ALLOCATE_QUOTA stream=%d cache=%d credentials_invalidated=%t", streamID, getCacheID(streamID), invalidated)\n'
+        '\t\t} else if isAuthError(err1) {',
+        "invalidate only the matching credential cache on TURN 486",
+    )
+
+    old_loop = (
+        'func oneTurnConnectionLoop(ctx context.Context, turnParams *turnParams, peer *net.UDPAddr, connchan <-chan net.PacketConn, t <-chan time.Time, streamID int) {\n'
+        '\tfor {\n'
+        '\t\tselect {\n'
+        '\t\tcase <-ctx.Done():\n'
+        '\t\t\treturn\n'
+        '\t\tcase conn2 := <-connchan:\n'
+        '\t\t\tselect {\n'
+        '\t\t\tcase <-t:\n'
+        '\t\t\tcase <-ctx.Done():\n'
+        '\t\t\t\treturn\n'
+        '\t\t\t}\n'
+        '\t\t\tc := make(chan error)\n'
+        '\t\t\tgo oneTurnConnection(ctx, turnParams, peer, conn2, streamID, c)\n'
+        '\n'
+        '\t\t\tif err := <-c; err != nil {\n'
+        '\t\t\t\tif strings.Contains(err.Error(), "FATAL_CAPTCHA") {\n'
+        '\t\t\t\t\tlog.Printf("[STREAM %d] Fatal manual captcha error. Shutting down application.", streamID)\n'
+        '\t\t\t\t\tif globalAppCancel != nil {\n'
+        '\t\t\t\t\t\tglobalAppCancel()\n'
+        '\t\t\t\t\t}\n'
+        '\t\t\t\t\treturn\n'
+        '\t\t\t\t}\n'
+        '\t\t\t\tif strings.Contains(err.Error(), "CAPTCHA_WAIT_REQUIRED") {\n'
+        '\t\t\t\t\tif !strings.Contains(err.Error(), "global lockout active") {\n'
+        '\t\t\t\t\t\tlog.Printf("[STREAM %d] Backing off for 60 seconds to avoid IP ban...", streamID)\n'
+        '\t\t\t\t\t\tselect {\n'
+        '\t\t\t\t\t\tcase <-ctx.Done():\n'
+        '\t\t\t\t\t\t\treturn\n'
+        '\t\t\t\t\t\tcase <-time.After(60 * time.Second):\n'
+        '\t\t\t\t\t\t}\n'
+        '\t\t\t\t\t} else {\n'
+        '\t\t\t\t\t\tlockoutEnd := globalCaptchaLockout.Load()\n'
+        '\t\t\t\t\t\tsleepDuration := time.Until(time.Unix(lockoutEnd, 0))\n'
+        '\t\t\t\t\t\tif sleepDuration < 0 {\n'
+        '\t\t\t\t\t\t\tsleepDuration = 5 * time.Second\n'
+        '\t\t\t\t\t\t}\n'
+        '\t\t\t\t\t\tselect {\n'
+        '\t\t\t\t\t\tcase <-ctx.Done():\n'
+        '\t\t\t\t\t\t\treturn\n'
+        '\t\t\t\t\t\tcase <-time.After(sleepDuration):\n'
+        '\t\t\t\t\t\t}\n'
+        '\t\t\t\t\t}\n'
+        '\t\t\t\t} else {\n'
+        '\t\t\t\t\tlog.Printf("[STREAM %d] %s", streamID, err)\n'
+        '\t\t\t\t\ttime.Sleep(2 * time.Second)\n'
+        '\t\t\t\t}\n'
+        '\t\t\t}\n'
+        '\t\t}\n'
+        '\t}\n'
+        '}'
+    )
+    new_loop = (
+        'func oneTurnConnectionLoop(ctx context.Context, turnParams *turnParams, peer *net.UDPAddr, connchan <-chan net.PacketConn, t <-chan time.Time, streamID int) {\n'
+        '\tfor {\n'
+        '\t\tselect {\n'
+        '\t\tcase <-ctx.Done():\n'
+        '\t\t\treturn\n'
+        '\t\tcase conn2 := <-connchan:\n'
+        '\t\t\tselect {\n'
+        '\t\t\tcase <-t:\n'
+        '\t\t\tcase <-ctx.Done():\n'
+        '\t\t\t\treturn\n'
+        '\t\t\t}\n'
+        '\t\t\tquotaRetry := 0\n'
+        '\t\t\tfor {\n'
+        '\t\t\t\tc := make(chan error, 1)\n'
+        '\t\t\t\tgo oneTurnConnection(ctx, turnParams, peer, conn2, streamID, c)\n'
+        '\t\t\t\terr := <-c\n'
+        '\t\t\t\tif err == nil { break }\n'
+        '\t\t\t\tif isQuotaError(err) && quotaRetry == 0 {\n'
+        '\t\t\t\t\tquotaRetry++\n'
+        '\t\t\t\t\tlog.Printf("[JPN_DIAG] TURN_QUOTA_RETRY stream=%d cache=%d action=refresh_credentials_keep_dtls", streamID, getCacheID(streamID))\n'
+        '\t\t\t\t\tselect {\n'
+        '\t\t\t\t\tcase <-ctx.Done(): return\n'
+        '\t\t\t\t\tcase <-time.After(2 * time.Second):\n'
+        '\t\t\t\t\t}\n'
+        '\t\t\t\t\tcontinue\n'
+        '\t\t\t\t}\n'
+        '\t\t\t\tif strings.Contains(err.Error(), "FATAL_CAPTCHA") {\n'
+        '\t\t\t\t\tlog.Printf("[STREAM %d] Fatal manual captcha error. Shutting down application.", streamID)\n'
+        '\t\t\t\t\tif globalAppCancel != nil { globalAppCancel() }\n'
+        '\t\t\t\t\treturn\n'
+        '\t\t\t\t}\n'
+        '\t\t\t\tif strings.Contains(err.Error(), "CAPTCHA_WAIT_REQUIRED") {\n'
+        '\t\t\t\t\tif !strings.Contains(err.Error(), "global lockout active") {\n'
+        '\t\t\t\t\t\tlog.Printf("[STREAM %d] Backing off for 60 seconds to avoid IP ban...", streamID)\n'
+        '\t\t\t\t\t\tselect { case <-ctx.Done(): return; case <-time.After(60 * time.Second): }\n'
+        '\t\t\t\t\t} else {\n'
+        '\t\t\t\t\t\tlockoutEnd := globalCaptchaLockout.Load()\n'
+        '\t\t\t\t\t\tsleepDuration := time.Until(time.Unix(lockoutEnd, 0))\n'
+        '\t\t\t\t\t\tif sleepDuration < 0 { sleepDuration = 5 * time.Second }\n'
+        '\t\t\t\t\t\tselect { case <-ctx.Done(): return; case <-time.After(sleepDuration): }\n'
+        '\t\t\t\t\t}\n'
+        '\t\t\t\t} else {\n'
+        '\t\t\t\t\tlog.Printf("[STREAM %d] %s", streamID, err)\n'
+        '\t\t\t\t\ttime.Sleep(2 * time.Second)\n'
+        '\t\t\t\t}\n'
+        '\t\t\t\tbreak\n'
+        '\t\t\t}\n'
+        '\t\t}\n'
+        '\t}\n'
+        '}'
+    )
+    source = replace_once(source, old_loop, new_loop, "retry only the failed worker once with fresh credentials after 486")
+    path.write_text(source, encoding="utf-8")
+
+
 def patch_manual_captcha(client: Path) -> None:
     path = client / "manual_captcha.go"
     source = path.read_text(encoding="utf-8")
@@ -821,6 +1003,7 @@ def main() -> None:
     patch_manual_captcha_wait(client)
     patch_captcha_diagnostics(client)
     patch_vk_captcha(client)
+    patch_quota_recovery(client)
 
     templates = Path(__file__).resolve().parent
     for name in ("turn_socket_protect_android.go", "turn_socket_protect_other.go"):
