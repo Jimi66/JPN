@@ -336,29 +336,37 @@ class XrayVpnService : VpnService() {
      * between Wi-Fi and cellular invalidates the existing TURN sockets; do not
      * attempt an automatic reconnect because it is unreliable on some devices.
      */
-    private fun getTurnNetworkTransport(network: Network?): Int? {
-        if (network == null) return null
-        val capabilities = connectivityManager?.getNetworkCapabilities(network) ?: return null
-        return when {
-            capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ->
-                android.net.NetworkCapabilities.TRANSPORT_WIFI
-            capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ->
-                android.net.NetworkCapabilities.TRANSPORT_CELLULAR
-            else -> null
-        }
-    }
-
     private fun registerTurnNetworkCallback() {
         unregisterTurnNetworkCallback()
         val manager = getSystemService(ConnectivityManager::class.java)
         connectivityManager = manager
-        lastDefaultTransport = getTurnNetworkTransport(manager.activeNetwork)
+        lastDefaultTransport = manager.activeNetwork?.let { network ->
+            manager.getNetworkCapabilities(network)?.let { capabilities ->
+                when {
+                    capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ->
+                        android.net.NetworkCapabilities.TRANSPORT_WIFI
+                    capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ->
+                        android.net.NetworkCapabilities.TRANSPORT_CELLULAR
+                    else -> null
+                }
+            }
+        }
 
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: android.net.NetworkCapabilities
+            ) {
+                val currentTransport = when {
+                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ->
+                        android.net.NetworkCapabilities.TRANSPORT_WIFI
+                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ->
+                        android.net.NetworkCapabilities.TRANSPORT_CELLULAR
+                    else -> null
+                } ?: return
+
                 workerHandler.post {
                     if (!coreStarted || activeTurnConfig == null || turnRequiresManualRestart) return@post
-                    val currentTransport = getTurnNetworkTransport(network) ?: return@post
                     val previousTransport = lastDefaultTransport
                     lastDefaultTransport = currentTransport
                     if (previousTransport == null) {
