@@ -154,7 +154,25 @@ class TurnCaptchaActivity : Activity() {
 
             override fun onPageFinished(view: WebView?, pageUrl: String?) {
                 progress?.visibility = View.GONE
-                status?.text = "Пройди проверку на странице VK. Ожидаю подтверждение…"
+                status?.text = "Страница VK загружена. Жду готовности интерфейса CAPTCHA…"
+                // Give VK's dynamically rendered CAPTCHA UI time to initialize after the
+                // document load event. This does not interact with or bypass the challenge.
+                view?.evaluateJavascript(
+                    """
+                    (function() {
+                      function notifyReady() {
+                        window.setTimeout(function() {
+                          if (document.readyState === 'complete' && window.JPNCaptchaBridge) {
+                            window.JPNCaptchaBridge.onPageReady();
+                          }
+                        }, 1200);
+                      }
+                      if (document.readyState === 'complete') notifyReady();
+                      else window.addEventListener('load', notifyReady, { once: true });
+                    })();
+                    """.trimIndent(),
+                    null
+                )
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -400,6 +418,15 @@ class TurnCaptchaActivity : Activity() {
     }
 
     inner class CaptchaBridge {
+        @JavascriptInterface
+        fun onPageReady() {
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    status?.text = "CAPTCHA VK готова. Отметь checkbox «Я не робот»; ожидаю подтверждение…"
+                }
+            }
+        }
+
         @JavascriptInterface
         fun onSuccess(token: String?) {
             if (token.isNullOrBlank() || token.length > 8192 || tokenSubmitted) return
