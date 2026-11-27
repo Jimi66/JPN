@@ -7,8 +7,6 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.Network
 import android.net.VpnService
 import android.service.quicksettings.TileService
 import android.os.Build
@@ -48,8 +46,6 @@ class XrayVpnService : VpnService() {
         private const val NOTIFICATION_ID = 4101
         private const val CAPTCHA_CHANNEL_ID = "jpn_captcha"
         private const val CAPTCHA_NOTIFICATION_ID = 4102
-        private const val NETWORK_CHANGE_CHANNEL_ID = "jpn_network_change"
-        private const val NETWORK_CHANGE_NOTIFICATION_ID = 4103
         private const val KEY_CAPTCHA_NOTIFICATION_URL = "turn_captcha_notification_url"
 
         // A single process-wide queue serializes VPN lifecycle work across
@@ -112,11 +108,6 @@ class XrayVpnService : VpnService() {
     private var vpnInterface: android.os.ParcelFileDescriptor? = null
     private var turnSocketProtector: TurnSocketProtector? = null
     @Volatile private var turnProcess: java.lang.Process? = null
-    private var activeTurnConfig: JSONObject? = null
-    private var connectivityManager: ConnectivityManager? = null
-    private var turnNetworkCallback: ConnectivityManager.NetworkCallback? = null
-    private var lastDefaultTransport: Int? = null
-    private var turnRequiresManualRestart = false
     private var coreStarted = false
     private var testMode = false
 
@@ -266,8 +257,6 @@ class XrayVpnService : VpnService() {
             TurnDiagnostics.record(this, "Запуск защиты TURN-сокетов")
             turnSocketProtector = TurnSocketProtector(this).also { it.start() }
             TurnDiagnostics.record(this, "Защита TURN-сокетов запущена")
-            activeTurnConfig = JSONObject(turnConfig.toString())
-            registerTurnNetworkCallback()
             startTurnClient(turnConfig)
         }
 
@@ -329,115 +318,6 @@ class XrayVpnService : VpnService() {
             else -> "VPN подключён"
         }
         publishState(if (turnConfig != null && !testMode) "connecting" else "connected", statusMessage, testMode)
-    }
-
-    /**
-     * Track only the transport type of Android's default network. A handover
-     * between Wi-Fi and cellular invalidates the existing TURN sockets; do not
-     * attempt an automatic reconnect because it is unreliable on some devices.
-     */
-    private fun registerTurnNetworkCallback() {
-        unregisterTurnNetworkCallback()
-        val manager = getSystemService(ConnectivityManager::class.java)
-        connectivityManager = manager
-        lastDefaultTransport = manager.activeNetwork?.let { network ->
-            manager.getNetworkCapabilities(network)?.let { capabilities ->
-                when {
-                    capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ->
-                        android.net.NetworkCapabilities.TRANSPORT_WIFI
-                    capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ->
-                        android.net.NetworkCapabilities.TRANSPORT_CELLULAR
-                    else -> null
-                }
-            }
-        }
-
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onCapabilitiesChanged(
-                network: Network,
-                networkCapabilities: android.net.NetworkCapabilities
-            ) {
-                val currentTransport = when {
-                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ->
-                        android.net.NetworkCapabilities.TRANSPORT_WIFI
-                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ->
-                        android.net.NetworkCapabilities.TRANSPORT_CELLULAR
-                    else -> null
-                } ?: return
-
-                workerHandler.post {
-                    if (!coreStarted || activeTurnConfig == null || turnRequiresManualRestart) return@post
-                    val previousTransport = lastDefaultTransport
-                    lastDefaultTransport = currentTransport
-                    if (previousTransport == null) {
-                        TurnDiagnostics.record(this@XrayVpnService, "Исходный тип сети TURN определён")
-                    } else if (
-                        previousTransport != currentTransport &&
-                        (previousTransport == android.net.NetworkCapabilities.TRANSPORT_WIFI ||
-                         previousTransport == android.net.NetworkCapabilities.TRANSPORT_CELLULAR) &&
-                        (currentTransport == android.net.NetworkCapabilities.TRANSPORT_WIFI ||
-                         currentTransport == android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
-                    ) {
-                        stopTurnAfterNetworkChange(previousTransport, currentTransport)
-                    }
-                }
-            }
-        }
-
-        turnNetworkCallback = callback
-        runCatching {
-            manager.registerDefaultNetworkCallback(callback)
-            TurnDiagnostics.record(this, "Отслеживание типа сети TURN включено")
-        }.onFailure { error ->
-            turnNetworkCallback = null
-            TurnDiagnostics.record(this, "Не удалось включить отслеживание сети: ${error.javaClass.simpleName}")
-        }
-    }
-
-    private fun unregisterTurnNetworkCallback() {
-        val callback = turnNetworkCallback
-        turnNetworkCallback = null
-        if (callback != null) {
-            runCatching { connectivityManager?.unregisterNetworkCallback(callback) }
-        }
-        connectivityManager = null
-        lastDefaultTransport = null
-    }
-
-    private fun stopTurnAfterNetworkChange(previousTransport: Int, currentTransport: Int) {
-        if (turnRequiresManualRestart) return
-        turnRequiresManualRestart = true
-        val previousName = if (previousTransport == android.net.NetworkCapabilities.TRANSPORT_WIFI) "Wi-Fi" else "LTE"
-        val currentName = if (currentTransport == android.net.NetworkCapabilities.TRANSPORT_WIFI) "Wi-Fi" else "LTE"
-        TurnDiagnostics.record(this, "Тип сети изменился: $previousName → $currentName; TURN остановлен до ручного перезапуска")
-        unregisterTurnNetworkCallback()
-
-        setTurnConnectionCount(0)
-        val child = turnProcess
-        turnProcess = null
-        if (child != null) {
-            runCatching { child.destroy() }
-            val exited = runCatching { child.waitFor(1, TimeUnit.SECONDS) }.getOrDefault(false)
-            if (!exited) {
-                TurnDiagnostics.record(this, "TURN-процесс не завершился штатно; принудительная остановка")
-                runCatching { child.destroyForcibly() }
-                runCatching { child.waitFor() }
-            }
-            val exitCode = runCatching { child.exitValue() }.getOrNull()
-            TurnDiagnostics.record(this, "TURN-процесс остановлен после смены типа сети (код: $exitCode)")
-            TurnDiagnostics.setProcessState(this, false, exitCode)
-        }
-
-        val message = "Wi-Fi/LTE сеть изменена. Необходимо перезапустить TURN"
-        publishState("error", message, testMode)
-        updateVpnNotification("TURN остановлен: сеть изменилась")
-        showNetworkChangeNotification(message)
-    }
-
-    private fun setTurnConnectionCount(connections: Int) {
-        getSharedPreferences("jpn_settings", Context.MODE_PRIVATE).edit()
-            .putInt("turn_connections", connections.coerceAtLeast(0))
-            .apply()
     }
 
     private fun startTurnClient(turnConfig: JSONObject) {
@@ -580,10 +460,6 @@ class XrayVpnService : VpnService() {
     }
 
     private fun stopCoreAndTunnel() {
-        unregisterTurnNetworkCallback()
-        activeTurnConfig = null
-        turnRequiresManualRestart = false
-        clearNetworkChangeNotification()
         clearCaptchaNotification()
         if (coreStarted) {
             runCatching {
@@ -688,58 +564,6 @@ class XrayVpnService : VpnService() {
             .remove(KEY_CAPTCHA_NOTIFICATION_URL)
             .remove(com.jpn.app.MainActivity.KEY_PENDING_TURN_CAPTCHA)
             .apply()
-    }
-
-    private fun showNetworkChangeNotification(message: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NETWORK_CHANGE_CHANNEL_ID,
-                "JPN — смена сети",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Уведомления о необходимости перезапустить TURN после смены Wi-Fi/LTE"
-            }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
-
-        val openAppIntent = Intent(this, com.jpn.app.MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            NETWORK_CHANGE_NOTIFICATION_ID,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or
-                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        )
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, NETWORK_CHANGE_CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-        val notification = builder
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setContentTitle("JPN — TURN остановлен")
-            .setContentText(message)
-            .setStyle(Notification.BigTextStyle().bigText(message))
-            .setContentIntent(contentIntent)
-            .setCategory(Notification.CATEGORY_STATUS)
-            .setAutoCancel(true)
-            .setOngoing(false)
-            .build()
-        runCatching {
-            getSystemService(NotificationManager::class.java)
-                .notify(NETWORK_CHANGE_NOTIFICATION_ID, notification)
-        }.onFailure { error ->
-            TurnDiagnostics.record(this, "Не удалось показать уведомление о смене сети: ${error.message ?: "ошибка Android"}")
-        }
-    }
-
-    private fun clearNetworkChangeNotification() {
-        runCatching {
-            getSystemService(NotificationManager::class.java).cancel(NETWORK_CHANGE_NOTIFICATION_ID)
-        }
     }
 
     private fun showCaptchaNotification(url: String) {
