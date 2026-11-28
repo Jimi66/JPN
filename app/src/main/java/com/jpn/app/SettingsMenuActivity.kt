@@ -91,7 +91,9 @@ class SettingsMenuActivity : Activity() {
         })
         val tunItems = sectionCard(cardColor, borderColor)
         addSubItem(tunItems, "Маршрутизация приложений", textColor, secondaryColor) {
-            startActivity(Intent(this, AppRoutingActivity::class.java))
+            startActivity(Intent(this, AppRoutingActivity::class.java).apply {
+                putExtra(AppRoutingActivity.EXTRA_ROUTING_PROFILE, AppRoutingActivity.PROFILE_TUN)
+            })
         }
         addDivider(tunItems, borderColor)
         addSubItem(tunItems, "Маршрутизация сайтов", textColor, secondaryColor) {
@@ -109,6 +111,12 @@ class SettingsMenuActivity : Activity() {
         val turnItems = sectionCard(cardColor, borderColor)
         addSubItem(turnItems, "Ссылка VK Call", textColor, secondaryColor) {
             startActivity(Intent(this, TurnSettingsActivity::class.java))
+        }
+        addDivider(turnItems, borderColor)
+        addSubItem(turnItems, "Маршрутизация приложений", textColor, secondaryColor) {
+            startActivity(Intent(this, AppRoutingActivity::class.java).apply {
+                putExtra(AppRoutingActivity.EXTRA_ROUTING_PROFILE, AppRoutingActivity.PROFILE_TURN)
+            })
         }
         addDivider(turnItems, borderColor)
         addSubItem(turnItems, "Диагностика TURN", textColor, secondaryColor) {
