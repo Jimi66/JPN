@@ -74,7 +74,7 @@ object JpnTheme {
         val border = if (dark) Color.rgb(67,70,81) else Color.rgb(226,227,231)
         root.setBackgroundColor(bg)
         fun walk(v: View) {
-            if (v is Button) {
+            if (v is Button && v !is android.widget.CompoundButton) {
                 styleButton(activity, v)
             } else if (v is TextView) {
                 val old = v.currentTextColor
