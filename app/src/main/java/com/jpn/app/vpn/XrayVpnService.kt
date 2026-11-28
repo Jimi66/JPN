@@ -261,9 +261,9 @@ class XrayVpnService : VpnService() {
         if (turnConfig != null && !testMode) {
             TurnDiagnostics.record(this, "Запуск защиты TURN-сокетов")
             val protector = TurnSocketProtector(this)
+            turnSocketProtector = protector
             TurnDiagnostics.record(this, "Создание локального сокета защиты TURN")
             protector.start()
-            turnSocketProtector = protector
             TurnDiagnostics.record(this, "Защита TURN-сокетов запущена")
             startTurnClient(turnConfig, protector.socketName)
         }
