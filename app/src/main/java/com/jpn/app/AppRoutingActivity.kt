@@ -26,9 +26,15 @@ class AppRoutingActivity : Activity() {
 
     companion object {
         private const val PREFS = "jpn_settings"
+        const val EXTRA_ROUTING_PROFILE = "routing_profile"
+        const val PROFILE_TUN = "tun"
+        const val PROFILE_TURN = "turn"
         private const val KEY_ROUTING_MODE = "routing_mode"
         private const val KEY_ROUTING_ENABLED = "routing_enabled"
         private const val KEY_ROUTING_PACKAGES = "routing_packages"
+        private const val KEY_TURN_ROUTING_MODE = "turn_routing_mode"
+        private const val KEY_TURN_ROUTING_ENABLED = "turn_routing_enabled"
+        private const val KEY_TURN_ROUTING_PACKAGES = "turn_routing_packages"
         private const val MODE_EXCLUDE = "exclude"
         private const val MODE_SELECTED = "selected"
     }
@@ -40,6 +46,12 @@ class AppRoutingActivity : Activity() {
     )
 
     private val preferences by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
+    private val isTurnProfile by lazy {
+        intent.getStringExtra(EXTRA_ROUTING_PROFILE) == PROFILE_TURN
+    }
+    private val modeKey by lazy { if (isTurnProfile) KEY_TURN_ROUTING_MODE else KEY_ROUTING_MODE }
+    private val enabledKey by lazy { if (isTurnProfile) KEY_TURN_ROUTING_ENABLED else KEY_ROUTING_ENABLED }
+    private val packagesKey by lazy { if (isTurnProfile) KEY_TURN_ROUTING_PACKAGES else KEY_ROUTING_PACKAGES }
     private val selectedPackages = linkedSetOf<String>()
     private var apps: List<AppEntry> = emptyList()
     private lateinit var appList: LinearLayout
@@ -51,7 +63,7 @@ class AppRoutingActivity : Activity() {
         super.onCreate(savedInstanceState)
         JpnTheme.applyBeforeCreate(this)
         selectedPackages.addAll(
-            preferences.getStringSet(KEY_ROUTING_PACKAGES, emptySet()) ?: emptySet()
+            preferences.getStringSet(packagesKey, emptySet()) ?: emptySet()
         )
         loadApps()
         buildScreen()
@@ -102,7 +114,7 @@ class AppRoutingActivity : Activity() {
         root.addView(back)
 
         val title = TextView(this).apply {
-            text = "Маршрутизация приложений"
+            text = if (isTurnProfile) "Маршрутизация приложений — TURN" else "Маршрутизация приложений — TUN"
             textSize = 21f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(0xFF202124.toInt())
@@ -110,7 +122,7 @@ class AppRoutingActivity : Activity() {
         root.addView(title)
 
         val description = TextView(this).apply {
-            text = "Выбери, какие приложения будут использовать VPN."
+            text = if (isTurnProfile) "Выбери приложения, трафик которых будет проходить через TURN." else "Выбери приложения, трафик которых будет проходить через TUN."
             textSize = 14f
             setTextColor(0xFF666666.toInt())
             setPadding(0, dp(5), 0, dp(12))
@@ -136,10 +148,10 @@ class AppRoutingActivity : Activity() {
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         )
         val routingSwitch = Switch(this).apply {
-            isChecked = preferences.getBoolean(KEY_ROUTING_ENABLED, false)
+            isChecked = preferences.getBoolean(enabledKey, false)
             contentDescription = "Маршрутизация приложений включена"
             setOnCheckedChangeListener { _, checked ->
-                preferences.edit().putBoolean(KEY_ROUTING_ENABLED, checked).apply()
+                preferences.edit().putBoolean(enabledKey, checked).apply()
             }
         }
         routingToggleRow.addView(routingSwitch)
@@ -168,11 +180,11 @@ class AppRoutingActivity : Activity() {
         modeGroup.addView(selectedMode)
         modeGroup.addView(excludeMode)
         modeGroup.check(
-            if (preferences.getString(KEY_ROUTING_MODE, MODE_SELECTED) == MODE_SELECTED) 2 else 1
+            if (preferences.getString(modeKey, MODE_SELECTED) == MODE_SELECTED) 2 else 1
         )
         modeGroup.setOnCheckedChangeListener { _, checkedId ->
             preferences.edit()
-                .putString(KEY_ROUTING_MODE, if (checkedId == 2) MODE_SELECTED else MODE_EXCLUDE)
+                .putString(modeKey, if (checkedId == 2) MODE_SELECTED else MODE_EXCLUDE)
                 .apply()
         }
         root.addView(modeGroup, LinearLayout.LayoutParams(
@@ -293,7 +305,7 @@ class AppRoutingActivity : Activity() {
                     if (checked) selectedPackages.add(app.packageName)
                     else selectedPackages.remove(app.packageName)
                     preferences.edit()
-                        .putStringSet(KEY_ROUTING_PACKAGES, HashSet(selectedPackages))
+                        .putStringSet(packagesKey, HashSet(selectedPackages))
                         .apply()
                     selectedCount.text = "Выбрано приложений: ${selectedPackages.size}"
                     renderApps()
