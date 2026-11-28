@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -37,6 +38,33 @@ object JpnTheme {
         activity.setTheme(if (isDark(activity)) R.style.JpnDarkTheme else R.style.JpnLightTheme)
     }
 
+    fun styleButton(activity: Activity, button: Button) {
+        val dark = isDark(activity)
+        val density = activity.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        val fill = if (dark) 0xFF272930.toInt() else Color.WHITE
+        val text = if (dark) 0xFFDCE8FF.toInt() else 0xFF123F83.toInt()
+        val stroke = if (dark) 0xFF91A9D0.toInt() else 0xFF7186A8.toInt()
+        val pressedFill = if (dark) 0xFF343A46.toInt() else 0xFFF0F4FA.toInt()
+        val pressedStroke = if (dark) 0xFFB8C9E8.toInt() else 0xFF123F83.toInt()
+
+        fun shape(color: Int, outline: Int) = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(color)
+            cornerRadius = dp(1000).toFloat()
+            setStroke(dp(1).coerceAtLeast(1), outline)
+        }
+        button.background = android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), shape(pressedFill, pressedStroke))
+            addState(intArrayOf(), shape(fill, stroke))
+        }
+        button.setTextColor(text)
+        button.isAllCaps = false
+        button.stateListAnimator = null
+        button.elevation = 0f
+        button.setPadding(dp(18), button.paddingTop, dp(18), button.paddingBottom)
+    }
+
     fun apply(activity: Activity, root: View) {
         val dark = isDark(activity)
         val bg = if (dark) Color.rgb(24,25,30) else Color.WHITE
@@ -46,8 +74,8 @@ object JpnTheme {
         val border = if (dark) Color.rgb(67,70,81) else Color.rgb(226,227,231)
         root.setBackgroundColor(bg)
         fun walk(v: View) {
-            if (v is android.widget.Button) {
-                v.setTextColor(0xFF454545.toInt())
+            if (v is Button) {
+                styleButton(activity, v)
             } else if (v is TextView) {
                 val old = v.currentTextColor
                 val accent = old == 0xFF514B83.toInt() || old == 0xFF706AA5.toInt()
