@@ -181,6 +181,11 @@ class XrayVpnService : VpnService() {
                     try {
                         startCoreAndTunnel(config)
                     } catch (error: Exception) {
+                        Log.e("JPN-TURN", "VPN/TURN startup failed", error)
+                        TurnDiagnostics.record(
+                            this,
+                            "Ошибка запуска VPN/TURN: ${error.javaClass.simpleName}: ${error.message ?: "без описания"}"
+                        )
                         stopCoreAndTunnel()
                         publishState("error", error.message ?: "Не удалось запустить Xray", testMode)
                         if (startId == latestStartId) {
@@ -255,9 +260,12 @@ class XrayVpnService : VpnService() {
         // SCM_RIGHTS; excluding the whole JPN package would also bypass Xray.
         if (turnConfig != null && !testMode) {
             TurnDiagnostics.record(this, "Запуск защиты TURN-сокетов")
-            turnSocketProtector = TurnSocketProtector(this).also { it.start() }
+            val protector = TurnSocketProtector(this)
+            TurnDiagnostics.record(this, "Создание локального сокета защиты TURN")
+            protector.start()
+            turnSocketProtector = protector
             TurnDiagnostics.record(this, "Защита TURN-сокетов запущена")
-            startTurnClient(turnConfig)
+            startTurnClient(turnConfig, protector.socketName)
         }
 
         // Xray's outbound sockets must bypass this VPN interface to avoid a routing loop.
@@ -320,7 +328,7 @@ class XrayVpnService : VpnService() {
         publishState(if (turnConfig != null && !testMode) "connecting" else "connected", statusMessage, testMode)
     }
 
-    private fun startTurnClient(turnConfig: JSONObject) {
+    private fun startTurnClient(turnConfig: JSONObject, socketProtectionName: String) {
         TurnDiagnostics.record(this, "Подготовка TURN-клиента")
         val peer = turnConfig.optString("peer").trim()
         val vkLink = turnConfig.optString("vkLink").trim()
@@ -350,7 +358,7 @@ class XrayVpnService : VpnService() {
         )
         val builder = ProcessBuilder(command).redirectErrorStream(true)
         builder.directory(filesDir)
-        builder.environment()["JPN_TURN_PROTECT_SOCKET"] = "@jpn.turn.protect"
+        builder.environment()["JPN_TURN_PROTECT_SOCKET"] = "@$socketProtectionName"
         builder.environment()["VK_PROFILE_PATH"] =
             File(filesDir, "vk_profile.json").absolutePath
 
