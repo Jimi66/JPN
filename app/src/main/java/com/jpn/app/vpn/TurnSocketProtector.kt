@@ -23,10 +23,9 @@ internal class TurnSocketProtector(
     private val vpnService: VpnService
 ) : Closeable {
 
-    companion object {
-        // Must match the Go client's JPN_TURN_PROTECT_SOCKET value: @jpn.turn.protect
-        const val SOCKET_NAME = "jpn.turn.protect"
-    }
+    // Each TURN session gets its own abstract socket name. This prevents a
+    // replacement service instance from colliding with a stale listener.
+    internal val socketName = "jpn.turn.protect.${Process.myPid()}.${System.nanoTime()}"
 
     private val closed = AtomicBoolean(false)
     @Volatile private var server: LocalServerSocket? = null
@@ -37,7 +36,7 @@ internal class TurnSocketProtector(
         check(!closed.get()) { "TURN socket protector is closed" }
         if (server != null) return
 
-        val localServer = LocalServerSocket(SOCKET_NAME)
+        val localServer = LocalServerSocket(socketName)
         server = localServer
         TurnDiagnostics.record(vpnService, "Локальный сокет защиты TURN создан")
 
@@ -119,7 +118,15 @@ internal class TurnSocketProtector(
         if (!closed.compareAndSet(false, true)) return
         runCatching { server?.close() }
         server = null
-        acceptThread?.interrupt()
+        val thread = acceptThread
         acceptThread = null
+        thread?.interrupt()
+        if (thread != null && thread !== Thread.currentThread()) {
+            runCatching { thread.join(1_000) }
+            if (thread.isAlive) {
+                TurnDiagnostics.record(vpnService, "Поток listener защиты TURN не завершился за 1 секунду")
+            }
+        }
+        TurnDiagnostics.record(vpnService, "Локальный сокет защиты TURN освобождён")
     }
 }
