@@ -220,16 +220,20 @@ class XrayVpnService : VpnService() {
             .addAddress("fdfe:dcba:9876::1", 126)
             .addRoute("::", 0)
 
-        // Per-app routing belongs only to ordinary TUN/VLESS sessions.
-        // TURN/WireGuard must always use its own full-tunnel behavior and must
-        // not inherit the app allow-/block-list configured for TUN mode.
+        // App routing is configured independently for ordinary TUN/VLESS and TURN.
+        // Android applies the allow-/disallow-list to traffic entering this VPN interface;
+        // the TURN transport itself continues to use its protected sockets.
         if (testMode) {
             builder.addAllowedApplication(packageName)
-        } else if (turnConfig == null) {
+        } else {
             val prefs = getSharedPreferences("jpn_settings", Context.MODE_PRIVATE)
-            if (prefs.getBoolean("routing_enabled", false)) {
-                val mode = prefs.getString("routing_mode", "selected") ?: "selected"
-                val selectedPackages = prefs.getStringSet("routing_packages", emptySet())
+            val isTurnSession = turnConfig != null
+            val enabledKey = if (isTurnSession) "turn_routing_enabled" else "routing_enabled"
+            val modeKey = if (isTurnSession) "turn_routing_mode" else "routing_mode"
+            val packagesKey = if (isTurnSession) "turn_routing_packages" else "routing_packages"
+            if (prefs.getBoolean(enabledKey, false)) {
+                val mode = prefs.getString(modeKey, "selected") ?: "selected"
+                val selectedPackages = prefs.getStringSet(packagesKey, emptySet())
                     ?.toSet()
                     .orEmpty()
                     .filter { app ->
@@ -238,7 +242,7 @@ class XrayVpnService : VpnService() {
                     }
                 when (mode) {
                     "selected" -> {
-                        // Empty or stale allow-list must never accidentally become full-tunnel.
+                        // An empty or stale allow-list must never accidentally become full-tunnel.
                         val allowed = selectedPackages.ifEmpty { listOf(packageName) }
                         allowed.forEach { app -> builder.addAllowedApplication(app) }
                     }
